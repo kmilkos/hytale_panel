@@ -264,6 +264,15 @@ export default function ServerDetail() {
     isAutoScrollRef.current = isAtBottom;
   };
 
+  const cleanAnsiCodes = (line) => {
+    if (!line) return '';
+    // Strip real ANSI escape codes
+    let clean = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    // Strip literal raw ANSI remnants like [m, [32m, [1m, [0m
+    clean = clean.replace(/\[[0-9;]*m/g, '');
+    return clean;
+  };
+
   const renderLineWithLinks = (line) => {
     if (!line) return '';
     const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -1090,23 +1099,26 @@ export default function ServerDetail() {
                 {logs.length === 0 ? (
                   <div style={{ color: 'var(--text-dark)' }}>Terminal listening for server stdout logs...</div>
                 ) : (
-                  logs.map((line, idx) => (
-                    <div 
-                      key={idx} 
-                      style={{ 
-                        color: line.startsWith('>') 
-                          ? 'var(--primary)' 
-                          : line.includes('ERROR') || line.includes('Exception') 
-                          ? 'var(--error)' 
-                          : line.includes('WARN') 
-                          ? 'var(--warning)' 
-                          : 'var(--text-main)',
-                        marginBottom: '4px'
-                      }}
-                    >
-                      {renderLineWithLinks(line)}
-                    </div>
-                  ))
+                  logs.map((line, idx) => {
+                    const cleanLine = cleanAnsiCodes(line);
+                    return (
+                      <div 
+                        key={idx} 
+                        style={{ 
+                          color: cleanLine.startsWith('>') 
+                            ? 'var(--primary)' 
+                            : cleanLine.includes('ERROR') || cleanLine.includes('Exception') 
+                            ? 'var(--error)' 
+                            : cleanLine.includes('WARN') 
+                            ? 'var(--warning)' 
+                            : 'var(--text-main)',
+                          marginBottom: '4px'
+                        }}
+                      >
+                        {renderLineWithLinks(cleanLine)}
+                      </div>
+                    );
+                  })
                 )}
                 <div ref={consoleBottomRef}></div>
               </div>
