@@ -212,28 +212,8 @@ async function startServer(db, id) {
 
   // Determine scripts and shells (Windows vs POSIX)
   const isWin = process.platform === 'win32';
-  const shell = isWin ? 'cmd.exe' : '/bin/bash';
-  const scriptName = isWin ? 'start.bat' : 'start.sh';
-  const scriptPath = path.join(server.install_path, scriptName);
-
-  // For testing convenience, if script does not exist, write a dummy stub script
-  if (!fs.existsSync(scriptPath)) {
-    try {
-      if (isWin) {
-        fs.writeFileSync(scriptPath, `@echo off\necho [System] Stub server starting...\nping 127.0.0.1 -n 5 > nul\necho [System] Stub server running...\nping 127.0.0.1 -n 3600 > nul`, 'utf8');
-      } else {
-        fs.writeFileSync(scriptPath, `#!/bin/bash\necho "[System] Stub server starting..."\nsleep 3\necho "[System] Stub server running..."\nsleep 3600`, 'utf8');
-        fs.chmodSync(scriptPath, '755');
-      }
-      logger.info(`Created stub server startup script at: ${scriptPath}`);
-    } catch (err) {
-      throw new HttpError(500, `Failed to create stub script at ${scriptPath}: ${err.message}`);
-    }
-  }
-
-  const args = isWin 
-    ? ['/c', scriptPath, '--bind', `0.0.0.0:${server.port || 25565}`]
-    : ['--norc', '--noprofile', scriptPath, '--bind', `0.0.0.0:${server.port || 25565}`];
+  const jarPath = path.join(server.install_path, 'Server', 'HytaleServer.jar');
+  const hasJar = fs.existsSync(jarPath);
 
   const env = { ...process.env };
   if (config.javaHome) {
@@ -246,11 +226,60 @@ async function startServer(db, id) {
     }
   }
 
-  logger.info(`Spawning server process ${server.slug} from ${server.install_path}`);
-  const proc = spawn(shell, args, {
-    cwd: server.install_path,
-    env,
-  });
+  let proc;
+  if (hasJar) {
+    // 1. Direct Java spawning (for real Hytale server process stdin/stdout proxying)
+    const javaExe = isWin ? 'java.exe' : 'java';
+    const javaPath = config.javaHome ? path.join(config.javaHome, 'bin', javaExe) : javaExe;
+    
+    const jvmArgs = server.jvm_args ? server.jvm_args.split(/\s+/).filter(Boolean) : ['-Xms2G', '-Xmx2G'];
+    const javaArgs = [
+      ...jvmArgs,
+      '-jar',
+      'Server/HytaleServer.jar',
+      '--assets',
+      'Assets.zip',
+      '--bind',
+      `0.0.0.0:${server.port || 25565}`
+    ];
+    
+    logger.info(`Spawning direct Java process for server ${server.slug} in ${server.install_path}`);
+    logger.info(`Command: ${javaPath} ${javaArgs.join(' ')}`);
+    
+    proc = spawn(javaPath, javaArgs, {
+      cwd: server.install_path,
+      env,
+    });
+  } else {
+    // 2. Shell startup script fallback (for testing/stubs convenience)
+    const shell = isWin ? 'cmd.exe' : '/bin/bash';
+    const scriptName = isWin ? 'start.bat' : 'start.sh';
+    const scriptPath = path.join(server.install_path, scriptName);
+
+    if (!fs.existsSync(scriptPath)) {
+      try {
+        if (isWin) {
+          fs.writeFileSync(scriptPath, `@echo off\necho [System] Stub server starting...\nping 127.0.0.1 -n 5 > nul\necho [System] Stub server running...\nping 127.0.0.1 -n 3600 > nul`, 'utf8');
+        } else {
+          fs.writeFileSync(scriptPath, `#!/bin/bash\necho "[System] Stub server starting..."\nsleep 3\necho "[System] Stub server running..."\nsleep 3600`, 'utf8');
+          fs.chmodSync(scriptPath, '755');
+        }
+        logger.info(`Created stub server startup script at: ${scriptPath}`);
+      } catch (err) {
+        throw new HttpError(500, `Failed to create stub script at ${scriptPath}: ${err.message}`);
+      }
+    }
+
+    const args = isWin 
+      ? ['/c', scriptPath, '--bind', `0.0.0.0:${server.port || 25565}`]
+      : ['--norc', '--noprofile', scriptPath, '--bind', `0.0.0.0:${server.port || 25565}`];
+
+    logger.info(`Spawning shell script for server stub ${server.slug} from ${server.install_path}`);
+    proc = spawn(shell, args, {
+      cwd: server.install_path,
+      env,
+    });
+  }
 
   activeProcesses.set(server.id, {
     proc,
