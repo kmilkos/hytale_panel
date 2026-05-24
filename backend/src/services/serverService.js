@@ -313,14 +313,30 @@ async function stopServer(db, id) {
     .run('stopped', id);
   serverEvents.emit('status', { serverId: id, status: 'stopping' });
 
-  // Send SIGTERM (or kill process directly)
-  active.proc.kill('SIGTERM');
+  // Send termination request (platform-specific process tree kill on Windows)
+  if (process.platform === 'win32') {
+    const { exec } = require('child_process');
+    exec(`taskkill /F /T /PID ${active.proc.pid}`, (err) => {
+      if (err) {
+        logger.error(`Failed to taskkill Windows process tree for server ${id}: ${err.message}`);
+      } else {
+        logger.info(`Successfully taskkilled Windows process tree for server ${id}`);
+      }
+    });
+  } else {
+    active.proc.kill('SIGTERM');
+  }
 
-  // Set 15s SIGKILL timeout
+  // Set 15s SIGKILL timeout fallback
   const killTimeout = setTimeout(() => {
     if (activeProcesses.has(id)) {
       logger.warn(`Server ${id} failed to exit gracefully, issuing SIGKILL.`);
-      active.proc.kill('SIGKILL');
+      if (process.platform === 'win32') {
+        const { exec } = require('child_process');
+        exec(`taskkill /F /T /PID ${active.proc.pid}`);
+      } else {
+        active.proc.kill('SIGKILL');
+      }
     }
   }, 15000);
 
