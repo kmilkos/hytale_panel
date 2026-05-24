@@ -361,6 +361,58 @@ module.exports = function(db) {
     }
   });
 
+  // GET /api/servers/:id/players/history (retrieve player join/leave history)
+  router.get('/:id/players/history', requireServerAccess('viewer', db), (req, res, next) => {
+    const id = parseInt(req.params.id, 10);
+    try {
+      if (isNaN(id)) throw new HttpError(400, 'Invalid server ID.');
+      
+      const rows = db.prepare(`
+        SELECT line, created_at
+        FROM server_logs
+        WHERE server_id = ?
+          AND stream = 'stdout'
+          AND (
+            line LIKE '%joined the game%' OR
+            line LIKE '%connected%' OR
+            line LIKE '%logged in%' OR
+            line LIKE '%left the game%' OR
+            line LIKE '%disconnected%' OR
+            line LIKE '%logged out%'
+          )
+        ORDER BY id DESC
+        LIMIT 50
+      `).all(id);
+
+      const history = [];
+      for (const row of rows) {
+        const joinMatch = row.line.match(/\[?(\w+)\]? (?:joined the game|connected|logged in)/i);
+        if (joinMatch) {
+          history.push({
+            player: joinMatch[1],
+            event: 'join',
+            timestamp: row.created_at,
+          });
+          continue;
+        }
+
+        const leaveMatch = row.line.match(/\[?(\w+)\]? (?:left the game|disconnected|logged out)/i);
+        if (leaveMatch) {
+          history.push({
+            player: leaveMatch[1],
+            event: 'leave',
+            timestamp: row.created_at,
+          });
+        }
+      }
+
+      res.json(history);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+
   // Backups Routes
 
   // GET /api/servers/:id/backups (list backups)

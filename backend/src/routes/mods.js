@@ -9,6 +9,7 @@ const curseForgeService = require('../services/curseForgeService');
 const nexusModsService = require('../services/nexusModsService');
 const { detectConflicts } = require('../services/conflictDetectionService');
 const { getActiveDownloads, downloadModFile } = require('../services/installService');
+const { buildCdnUrl } = require('../services/curseForgeService');
 
 module.exports = function(db) {
   const router = express.Router();
@@ -62,6 +63,19 @@ module.exports = function(db) {
           c.mod2_name === dbMeta?.mod_name
         );
 
+        // Check for associated configuration or data folders
+        const cleanDirName = cleanName.replace(/\.(jar|zip)$/i, '');
+        const foldersToCheck = [
+          path.join(modsDir, cleanDirName),
+          path.join(modsDir, 'config', cleanDirName)
+        ];
+        const associatedFolders = [];
+        for (const fPath of foldersToCheck) {
+          if (fs.existsSync(fPath) && fs.statSync(fPath).isDirectory()) {
+            associatedFolders.push(path.relative(server.install_path, fPath));
+          }
+        }
+
         return {
           fileName: filename,
           isActive,
@@ -72,6 +86,7 @@ module.exports = function(db) {
           name: dbMeta?.mod_name || cleanName.replace(/\.(jar|zip)$/i, '').replace(/[-_]/g, ' '),
           sha1: dbMeta?.sha1 || null,
           cdnUrl: dbMeta?.cdn_url || null,
+          associatedFolders,
           conflicts: modConflicts.map(c => ({
             type: c.conflict_type,
             severity: c.severity,
@@ -126,10 +141,10 @@ module.exports = function(db) {
     }
   });
 
-  // DELETE /api/servers/:serverId/mods - Delete a mod file
+  // DELETE /api/servers/:serverId/mods - Delete a mod file and handle folders
   router.delete('/server/:serverId', async (req, res, next) => {
     const { serverId } = req.params;
-    const { fileName } = req.body;
+    const { fileName, deleteFoldersAction } = req.body; // 'delete' | 'backup' | 'keep'
     try {
       if (!fileName) throw new HttpError(400, 'FileName is required.');
 
@@ -140,21 +155,103 @@ module.exports = function(db) {
         throw new HttpError(404, 'Mod file not found.');
       }
 
+      // 1. Delete the mod file itself
       fs.unlinkSync(safePath);
 
-      // Clean up record in DB if it was logged
+      // 2. Identify associated folders
       const cleanName = fileName.replace('.disabled', '');
+      const cleanDirName = cleanName.replace(/\.(jar|zip)$/i, '');
+      const foldersToCheck = [
+        path.join(modsDir, cleanDirName),
+        path.join(modsDir, 'config', cleanDirName)
+      ];
+      
+      const processedFolders = [];
+
+      for (const fPath of foldersToCheck) {
+        if (fs.existsSync(fPath) && fs.statSync(fPath).isDirectory()) {
+          const relativePath = path.relative(server.install_path, fPath);
+          
+          if (deleteFoldersAction === 'delete') {
+            fs.rmSync(fPath, { recursive: true, force: true });
+            processedFolders.push({ path: relativePath, action: 'deleted' });
+          } else if (deleteFoldersAction === 'backup') {
+            const backupsDir = path.join(server.install_path, '.backups', 'mods_data');
+            const modBackupDir = path.join(backupsDir, `${cleanDirName}_${Date.now()}`);
+            if (!fs.existsSync(modBackupDir)) {
+              fs.mkdirSync(modBackupDir, { recursive: true });
+            }
+            const destSubPath = path.join(modBackupDir, relativePath);
+            const destSubDir = path.dirname(destSubPath);
+            if (!fs.existsSync(destSubDir)) {
+              fs.mkdirSync(destSubDir, { recursive: true });
+            }
+            fs.renameSync(fPath, destSubPath);
+            processedFolders.push({ path: relativePath, action: 'backed_up', backupPath: path.relative(server.install_path, destSubPath) });
+          } else {
+            processedFolders.push({ path: relativePath, action: 'kept' });
+          }
+        }
+      }
+
+      // Clean up record in DB if it was logged
       db.prepare('DELETE FROM installed_mods WHERE server_id = ? AND (file_name = ? OR file_name = ?)')
         .run(serverId, fileName, cleanName);
 
       // Log audit trail
+      const detailsMsg = `Deleted mod file ${fileName}. Associated folders: ${JSON.stringify(processedFolders)}`;
       db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
-        .run(req.user.sub, 'delete-mod', `server:${serverId}`, `Deleted mod file ${fileName}`, req.ip);
+        .run(req.user.sub, 'delete-mod', `server:${serverId}`, detailsMsg, req.ip);
 
       // Re-run conflict detection
       await detectConflicts(db, serverId);
 
-      res.json({ message: 'Mod file deleted successfully.' });
+      res.json({ message: 'Mod file deleted successfully.', processedFolders });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/servers/:serverId/mods/install-check - Check if backups exist for a mod before installing
+  router.get('/server/:serverId/install-check', async (req, res, next) => {
+    const { serverId } = req.params;
+    const { fileName } = req.query;
+    try {
+      if (!fileName) throw new HttpError(400, 'FileName query parameter is required.');
+
+      const { server } = resolveModsDir(serverId);
+      const backupsDir = path.join(server.install_path, '.backups', 'mods_data');
+      
+      const cleanName = fileName.replace('.disabled', '');
+      const cleanDirName = cleanName.replace(/\.(jar|zip)$/i, '');
+
+      const availableBackups = [];
+
+      if (fs.existsSync(backupsDir)) {
+        const items = fs.readdirSync(backupsDir);
+        for (const item of items) {
+          const itemPath = path.join(backupsDir, item);
+          if (fs.statSync(itemPath).isDirectory() && item.startsWith(`${cleanDirName}_`)) {
+            const timestampPart = item.substring(cleanDirName.length + 1);
+            const timestamp = parseInt(timestampPart, 10);
+            if (!isNaN(timestamp)) {
+              availableBackups.push({
+                id: item,
+                timestamp: new Date(timestamp).toISOString(),
+                dateFormatted: new Date(timestamp).toLocaleString()
+              });
+            }
+          }
+        }
+      }
+
+      // Sort newest first
+      availableBackups.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+      res.json({
+        hasBackup: availableBackups.length > 0,
+        backups: availableBackups
+      });
     } catch (err) {
       next(err);
     }
@@ -193,18 +290,63 @@ module.exports = function(db) {
     }
   });
 
-  // POST /api/servers/:serverId/mods/install - Download mod from CurseForge or direct URL
+  // POST /api/servers/:serverId/mods/install - Download mod from CurseForge or direct URL and optionally restore backup
   router.post('/server/:serverId/install', async (req, res, next) => {
     const { serverId } = req.params;
-    const { source, modId, fileId, downloadUrl, fileName, sha1 } = req.body;
+    const { source, modId, fileId, downloadUrl, fileName, sha1, restoreBackupId } = req.body;
     try {
       if (!fileName) throw new HttpError(400, 'FileName is required.');
 
-      let resolvedUrl = downloadUrl;
+      const { server } = resolveModsDir(serverId);
+
+      // Handle restoring a previous data/config folder backup if requested
+      if (restoreBackupId) {
+        const backupsDir = path.join(server.install_path, '.backups', 'mods_data');
+        const safeBackupPath = resolveSafePath(backupsDir, restoreBackupId);
+        
+        if (fs.existsSync(safeBackupPath)) {
+          const logger = require('../utils/logger');
+          logger.info(`Restoring associated data backup: ${restoreBackupId} for mod ${fileName}`);
+          
+          const restoreFolderTree = (src, dest) => {
+            if (!fs.existsSync(src)) return;
+            const items = fs.readdirSync(src);
+            for (const item of items) {
+              const srcPath = path.join(src, item);
+              const destPath = path.join(dest, item);
+              const stat = fs.statSync(srcPath);
+              if (stat.isDirectory()) {
+                if (!fs.existsSync(destPath)) {
+                  fs.mkdirSync(destPath, { recursive: true });
+                }
+                restoreFolderTree(srcPath, destPath);
+              } else {
+                fs.copyFileSync(srcPath, destPath);
+              }
+            }
+          };
+
+          restoreFolderTree(safeBackupPath, server.install_path);
+          // Delete backup directory after successful restore
+          fs.rmSync(safeBackupPath, { recursive: true, force: true });
+          logger.info(`Successfully restored data backup: ${restoreBackupId}`);
+        }
+      }
+
+      let resolvedUrl = downloadUrl || null;
       
-      // If CurseForge and URL is missing, resolve URL dynamically
+      // If CurseForge and URL is missing or null, resolve the real CDN URL via API
+      // (CurseForge intentionally omits downloadUrl for some files in the file list)
       if (source === 'curseforge' && modId && fileId && !resolvedUrl) {
-        resolvedUrl = await curseForgeService.getModFileDownloadUrl(db, modId, fileId);
+        // Pass fileName so the service can fall back to CDN URL without API key
+        resolvedUrl = await curseForgeService.getModFileDownloadUrl(db, modId, fileId, fileName);
+      }
+
+      // Final safety net: if still no URL but we have fileId + fileName, build CDN URL directly
+      if (!resolvedUrl && source === 'curseforge' && fileId && fileName) {
+        resolvedUrl = buildCdnUrl(fileId, fileName);
+        const logger = require('../utils/logger');
+        logger.info(`Using direct CDN URL fallback for ${fileName}: ${resolvedUrl}`);
       }
 
       if (!resolvedUrl) {
@@ -219,7 +361,7 @@ module.exports = function(db) {
 
       // Log audit log
       db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
-        .run(req.user.sub, 'install-mod', `server:${serverId}`, `Triggered install of mod ${fileName} from ${source || 'direct'}`, req.ip);
+        .run(req.user.sub, 'install-mod', `server:${serverId}`, `Triggered install of mod ${fileName} from ${source || 'direct'}${restoreBackupId ? ' (restored backup ' + restoreBackupId + ')' : ''}`, req.ip);
 
       res.status(202).json(result);
     } catch (err) {

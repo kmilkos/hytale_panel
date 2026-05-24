@@ -13,6 +13,19 @@ function getApiKey(db) {
   return row.value;
 }
 
+/**
+ * Build a direct CDN download URL from a numeric fileId and fileName.
+ * This mirrors the pattern used by Prism Launcher, MultiMC, and ATLauncher:
+ *   https://edge.forgecdn.net/files/{Math.floor(id/1000)}/{id%1000}/{fileName}
+ * Works without any API key.
+ */
+function buildCdnUrl(fileId, fileName) {
+  const id = parseInt(fileId, 10);
+  const part1 = Math.floor(id / 1000);
+  const part2 = id % 1000;
+  return `https://edge.forgecdn.net/files/${part1}/${part2}/${encodeURIComponent(fileName)}`;
+}
+
 async function requestCF(db, endpoint, options = {}) {
   const apiKey = getApiKey(db);
   const url = `${BASE_URL}${endpoint}`;
@@ -94,7 +107,9 @@ async function getModFiles(db, modId, { limit = 20 } = {}) {
     fileLength: file.fileLength,
     releaseDate: file.fileDate,
     hashes: file.hashes,
-    downloadUrl: file.downloadUrl,
+    // Use API-provided URL when available; always include CDN fallback
+    downloadUrl: file.downloadUrl || buildCdnUrl(file.id, file.fileName),
+    cdnUrl: buildCdnUrl(file.id, file.fileName),
     gameVersions: file.gameVersions,
   }));
 }
@@ -105,10 +120,31 @@ async function getModFile(db, modId, fileId) {
   return res.data;
 }
 
-async function getModFileDownloadUrl(db, modId, fileId) {
-  const res = await requestCF(db, `/mods/${modId}/files/${fileId}/download-url`);
-  if (!res.data) throw new HttpError(404, 'Download URL not resolved by CurseForge.');
-  return res.data; // Typically returns a string url directly or JSON wrapper containing downloadUrl
+async function getModFileDownloadUrl(db, modId, fileId, fileName = null) {
+  // If no API key is configured, fall back to the keyless CDN URL pattern
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('curseforge_api_key');
+  if (!row || !row.value) {
+    if (!fileName) {
+      throw new HttpError(400, 'CurseForge API key is not configured and no fileName was provided for CDN fallback.');
+    }
+    const cdnUrl = buildCdnUrl(fileId, fileName);
+    logger.info(`No CurseForge API key — using keyless CDN URL for file ${fileId}: ${cdnUrl}`);
+    return cdnUrl;
+  }
+
+  try {
+    const res = await requestCF(db, `/mods/${modId}/files/${fileId}/download-url`);
+    if (!res.data) throw new HttpError(404, 'Download URL not resolved by CurseForge.');
+    return res.data;
+  } catch (err) {
+    // If the API call fails but we have a fileName, fall back to CDN construction
+    if (fileName) {
+      const cdnUrl = buildCdnUrl(fileId, fileName);
+      logger.warn(`CurseForge download-url API failed (${err.message}), falling back to CDN URL: ${cdnUrl}`);
+      return cdnUrl;
+    }
+    throw err;
+  }
 }
 
 module.exports = {
@@ -117,4 +153,5 @@ module.exports = {
   getModFiles,
   getModFile,
   getModFileDownloadUrl,
+  buildCdnUrl,
 };

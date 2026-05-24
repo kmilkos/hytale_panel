@@ -59,29 +59,33 @@ export async function apiRequest(endpoint, options = {}) {
 
   const url = `${API_BASE_URL}${endpoint}`;
 
+  let res;
   try {
-    const res = await fetch(url, { ...options, headers, body });
-    
-    if (res.status === 401) {
-      clearToken();
-      if (!window.location.hash.includes('/login') && !window.location.pathname.includes('/login')) {
-        window.location.href = '#/login';
-      }
-      throw new Error('Unauthorized');
-    }
-
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.message || `API error: ${res.statusText} (${res.status})`);
-    }
-
-    // Check content type before parsing
-    const contentType = res.headers.get('content-type');
-    if (contentType && contentType.includes('application/json')) {
-      return await res.json();
-    }
-    return null;
-  } catch (err) {
-    throw err;
+    res = await fetch(url, { ...options, headers, body });
+  } catch (networkErr) {
+    // Network-level failure: server down, CORS block, no internet, etc.
+    throw new Error(`Cannot connect to the server. Make sure the backend is running on port 5600. (${networkErr.message})`);
   }
+
+  if (res.status === 401) {
+    clearToken();
+    if (!window.location.hash.includes('/login') && !window.location.pathname.includes('/login')) {
+      window.location.href = '#/login';
+    }
+    throw new Error('Session expired. Please log in again.');
+  }
+
+  if (!res.ok) {
+    // Backend returns { error: { status, message, details } }
+    const errData = await res.json().catch(() => ({}));
+    const message = errData?.error?.message || errData?.message || `Server error ${res.status}: ${res.statusText}`;
+    throw new Error(message);
+  }
+
+  // Check content type before parsing
+  const contentType = res.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return await res.json();
+  }
+  return null;
 }

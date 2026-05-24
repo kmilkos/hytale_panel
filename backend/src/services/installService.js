@@ -68,9 +68,16 @@ async function downloadModFile(db, serverId, downloadUrl, fileName, options = {}
 
     try {
       logger.info(`Starting download for mod file: ${fileName} from ${downloadUrl}`);
-      const res = await fetch(downloadUrl);
+      const res = await fetch(downloadUrl, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          'Accept': 'application/octet-stream, */*',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+      });
       if (!res.ok) {
-        throw new Error(`Server returned status: ${res.statusText} (${res.status})`);
+        throw new Error(`Server returned ${res.status} ${res.statusText} when downloading from: ${downloadUrl}`);
       }
 
       const totalBytes = parseInt(res.headers.get('content-length'), 10) || 0;
@@ -118,7 +125,7 @@ async function downloadModFile(db, serverId, downloadUrl, fileName, options = {}
         INSERT INTO installed_mods (
           server_id, curseforge_mod_id, curseforge_file_id, mod_name, file_name,
           file_length, sha1, cdn_url, cdn_url_resolved_at, installed_path, installed_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?, datetime('now'), datetime('now'))
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
         ON CONFLICT(server_id, curseforge_mod_id, curseforge_file_id) DO UPDATE SET
           file_name = excluded.file_name,
           file_length = excluded.file_length,

@@ -132,6 +132,26 @@ function parsePlayersFromLog(serverId, line) {
     return;
   }
 
+  // Hytale /who command response matcher (e.g. "default (1): : Maximilkian (Maximilkian)")
+  const whoMatch = line.match(/^\s*[\w\-]+\s*\((\d+)\):\s*:\s*(.*)/i);
+  if (whoMatch) {
+    const playersStr = whoMatch[2].trim();
+    const id = parseInt(serverId, 10);
+    const set = new Set();
+    if (playersStr) {
+      const parts = playersStr.split(',').map(p => p.trim());
+      for (const part of parts) {
+        const nameMatch = part.match(/^([^\s\()]+)/);
+        if (nameMatch) {
+          set.add(nameMatch[1]);
+        }
+      }
+    }
+    onlinePlayers.set(id, set);
+    broadcastPlayers(id);
+    return;
+  }
+
   // List command response matcher
   const listMatch = line.match(/(?:players online|online players|players):\s*(.*)/i);
   if (listMatch) {
@@ -539,7 +559,7 @@ function startScheduler(db) {
         // Player list polling (every 90 seconds = 3 loops * 30s)
         if (loopCount % 3 === 0) {
           try {
-            sendCommand(db, srv.id, 'list');
+            sendCommand(db, srv.id, 'who');
           } catch (_) {}
         }
       }

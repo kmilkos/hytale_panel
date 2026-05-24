@@ -43,8 +43,16 @@ function Install-Dependency {
     )
     
     $installed = Get-Command $CheckCommand -ErrorAction SilentlyContinue
+    if ($installed -and $CheckCommand -eq "java") {
+        $versionOutput = & java -version 2>&1 | Out-String
+        if ($versionOutput -notmatch 'version "25') {
+            Write-Host "[!] Found existing Java version, but not Java 25. Upgrading to Adoptium Java 25..."
+            $installed = $null
+        }
+    }
+
     if (-not $installed) {
-        Write-Host "[*] $Name is missing. Installing via winget..."
+        Write-Host "[*] $Name is missing or outdated. Installing via winget..."
         winget install -e --id $WingetId --silent --accept-package-agreements --accept-source-agreements
         if ($LASTEXITCODE -ne 0) {
             Write-Warning "[!] Winget installation for $Name failed. Please install it manually."
@@ -52,14 +60,14 @@ function Install-Dependency {
             Write-Host "[+] Successfully installed $Name."
         }
     } else {
-        Write-Host "[+] $Name is already installed."
+        Write-Host "[+] $Name is already installed and matches required version."
     }
 }
 
 # Install Git, Node.js, and Java Adoptium JDK
 Install-Dependency "Git" "git" "Git.Git"
 Install-Dependency "Node.js 22 LTS" "node" "OpenJS.NodeJS.LTS"
-Install-Dependency "Eclipse Adoptium OpenJDK" "java" "EclipseAdoptium.Temurin.21.JDK"
+Install-Dependency "Eclipse Adoptium OpenJDK 25" "java" "EclipseAdoptium.Temurin.25.JDK"
 
 # Refresh PATH environment variable in the current session
 Write-Host "[*] Refreshing session environment path..."

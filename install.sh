@@ -51,8 +51,8 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" || "$OS_LIKE" == *"debian"* || "$OS
   echo "[*] Updating apt package lists..."
   apt-get update -y
   
-  echo "[*] Installing Git, Curl, Build tools..."
-  apt-get install -y git curl build-essential
+  echo "[*] Installing Git, Curl, Build tools, Python3, and SQLite headers..."
+  apt-get install -y git curl build-essential python3 libsqlite3-dev
 
   # Install Node.js 22 LTS if not present
   if ! command -v node &> /dev/null; then
@@ -63,14 +63,27 @@ if [[ "$OS" == "debian" || "$OS" == "ubuntu" || "$OS_LIKE" == *"debian"* || "$OS
     echo "[+] Node.js is already installed: $(node -v)"
   fi
 
-  # Install Java JDK (Hytale requirements Java 25 preferred)
-  echo "[*] Installing Java JDK..."
-  apt-get install -y openjdk-25-jdk-headless || apt-get install -y openjdk-21-jdk-headless || apt-get install -y default-jdk-headless
+  # Install Java JDK (Hytale requirements: Java 25 Adoptium recommended)
+  echo "[*] Configuring Eclipse Adoptium package repository for Java 25..."
+  apt-get install -y wget apt-transport-https gpg
+  wget -qO - https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor | tee /etc/apt/trusted.gpg.d/adoptium.gpg > /dev/null
+  CODENAME=$(awk -F= '/^VERSION_CODENAME/{print $2}' /etc/os-release)
+  if [ -z "$CODENAME" ]; then
+    CODENAME=$(lsb_release -cs 2>/dev/null || echo "stable")
+  fi
+  echo "deb https://packages.adoptium.net/artifactory/deb $CODENAME main" | tee /etc/apt/sources.list.d/adoptium.list
+  apt-get update -y
+
+  echo "[*] Installing Eclipse Temurin Java 25 JDK..."
+  apt-get install -y temurin-25-jdk || {
+    echo "[!] Adoptium package installation failed. Falling back to default repositories..."
+    apt-get install -y openjdk-25-jdk-headless || apt-get install -y openjdk-21-jdk-headless || apt-get install -y default-jdk-headless
+  }
 
 elif [[ "$OS" == "fedora" || "$OS" == "centos" || "$OS" == "rhel" || "$OS_LIKE" == *"fedora"* || "$OS_LIKE" == *"rhel"* ]]; then
-  echo "[*] Installing Git, Curl, Development Tools..."
+  echo "[*] Installing Git, Curl, Development Tools, Python3, and SQLite headers..."
   dnf groupinstall -y "Development Tools"
-  dnf install -y git curl
+  dnf install -y git curl python3 sqlite-devel
 
   # Install Node.js if not present
   if ! command -v node &> /dev/null; then
@@ -80,16 +93,38 @@ elif [[ "$OS" == "fedora" || "$OS" == "centos" || "$OS" == "rhel" || "$OS_LIKE" 
     echo "[+] Node.js is already installed: $(node -v)"
   fi
 
-  # Install Java JDK
-  echo "[*] Installing Java JDK..."
-  dnf install -y java-25-openjdk-headless || dnf install -y java-latest-openjdk-headless || dnf install -y java-17-openjdk-headless
+  # Install Java JDK (Hytale requirements: Java 25 Adoptium recommended)
+  echo "[*] Configuring Eclipse Adoptium package repository for Java 25..."
+  REPO_OS="$OS"
+  if [[ "$OS" == "rocky" || "$OS" == "almalinux" || "$OS" == "centos" ]]; then
+    REPO_OS="centos"
+  elif [[ "$OS" == "rhel" ]]; then
+    REPO_OS="rhel"
+  elif [[ "$OS" == "fedora" ]]; then
+    REPO_OS="fedora"
+  fi
+
+  cat <<EOF > /etc/yum.repos.d/adoptium.repo
+[Adoptium]
+name=Adoptium
+baseurl=https://packages.adoptium.net/artifactory/rpm/${REPO_OS}/\$releasever/\$basearch
+enabled=1
+gpgcheck=1
+gpgkey=https://packages.adoptium.net/artifactory/api/gpg/key/public
+EOF
+
+  echo "[*] Installing Eclipse Temurin Java 25 JDK..."
+  dnf install -y temurin-25-jdk || {
+    echo "[!] Adoptium package installation failed. Falling back to default repositories..."
+    dnf install -y java-25-openjdk-headless || dnf install -y java-latest-openjdk-headless || dnf install -y java-17-openjdk-headless
+  }
 else
   echo "[!] Unsupported OS distribution. Attempting generic package managers installation..."
   # Try to install if package manager commands exist
   if command -v apt-get &> /dev/null; then
-    apt-get update && apt-get install -y git nodejs openjdk-25-jdk-headless
+    apt-get update && apt-get install -y git curl build-essential python3 libsqlite3-dev nodejs openjdk-25-jdk-headless || apt-get install -y git curl build-essential python3 libsqlite3-dev nodejs default-jdk-headless
   elif command -v dnf &> /dev/null; then
-    dnf install -y git nodejs java-latest-openjdk-headless
+    dnf install -y git curl python3 sqlite-devel nodejs java-25-openjdk-headless || dnf install -y git curl python3 sqlite-devel nodejs java-latest-openjdk-headless
   else
     echo "[-] Error: Supported package managers (apt, dnf) not found. Install Node.js, Java, and Git manually." >&2
     exit 1
@@ -98,13 +133,35 @@ fi
 
 # Verify dependencies
 echo "[*] Verifying runtime dependencies..."
-node -v
-npm -v
-java -version || echo "[!] Java could not be verified automatically."
+echo -n "Node.js: " && node -v
+echo -n "NPM: " && npm -v
+if command -v java &> /dev/null; then
+  echo -n "Java: " && java -version 2>&1 | head -n 1
+  JAVA_VER=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}')
+  if [[ "$JAVA_VER" != "25"* ]]; then
+    echo "[!] Warning: Default system Java is not version 25 (detected: $JAVA_VER)."
+    if command -v update-alternatives &> /dev/null; then
+      echo "[*] Attempting to select Java 25 default..."
+      JAVA_25_BIN=$(update-alternatives --list java 2>/dev/null | grep -E "25|temurin-25" | head -n 1)
+      if [ -n "$JAVA_25_BIN" ]; then
+        update-alternatives --set java "$JAVA_25_BIN" || true
+        echo "[+] Updated default Java to: $(java -version 2>&1 | head -n 1)"
+      fi
+    fi
+  fi
+else
+  echo "[!] Java is not found in PATH."
+fi
 
 # Setup Application Workspace
 echo "[*] Navigating to: $APP_DIR"
 cd "$APP_DIR"
+
+# Configure npm to use python3 for native builds
+if command -v python3 &> /dev/null; then
+  echo "[*] Configuring NPM to use Python3 for native C++ builds..."
+  npm config set python python3
+fi
 
 echo "[*] Installing NPM dependencies..."
 npm install

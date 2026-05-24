@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest, API_BASE_URL, WS_BASE_URL, getToken, getUser } from '../utils/api';
+import { showConfirm, showModDeleteConfirm } from '../utils/confirm';
 
 export default function ServerDetail() {
   const { id } = useParams();
@@ -104,6 +105,7 @@ export default function ServerDetail() {
 
   // 6. Players Tab State
   const [onlinePlayers, setOnlinePlayers] = useState([]);
+  const [playerHistory, setPlayerHistory] = useState([]);
   const [whitelistContent, setWhitelistContent] = useState('');
   const [bansContent, setBansContent] = useState('');
   const [savingPlayers, setSavingPlayers] = useState(false);
@@ -145,6 +147,7 @@ export default function ServerDetail() {
 
     if (activeTab === 'players') {
       fetchOnlinePlayers();
+      fetchPlayerHistory();
     }
 
     if (activeTab === 'schedules') {
@@ -450,7 +453,13 @@ export default function ServerDetail() {
   const fetchFiles = async (relPath) => {
     try {
       const files = await apiRequest(`/files?serverId=${id}&relPath=${encodeURIComponent(relPath)}`);
-      setFilesList(files);
+      // Sort directories to the top, followed by files alphabetically
+      const sortedFiles = (files || []).sort((a, b) => {
+        if (a.isDir && !b.isDir) return -1;
+        if (!a.isDir && b.isDir) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      setFilesList(sortedFiles);
     } catch (err) {
       console.error(err);
     }
@@ -514,7 +523,7 @@ export default function ServerDetail() {
   };
 
   const handleDeletePath = async (filename) => {
-    if (!confirm(`Are you sure you want to permanently delete "${filename}"?`)) return;
+    if (!await showConfirm(`Are you sure you want to permanently delete "${filename}"?`, { title: 'Delete File', isDanger: true })) return;
     const filePath = currentRelPath ? `${currentRelPath}/${filename}` : filename;
     try {
       await apiRequest('/files', {
@@ -563,6 +572,27 @@ export default function ServerDetail() {
       setOnlinePlayers(data || []);
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchPlayerHistory = async () => {
+    try {
+      const data = await apiRequest(`/servers/${id}/players/history`);
+      setPlayerHistory(data || []);
+    } catch (err) {
+      console.error('Failed to fetch player connection history:', err);
+    }
+  };
+
+  const handlePlayerCommand = async (commandString) => {
+    try {
+      await apiRequest(`/servers/${id}/command`, {
+        method: 'POST',
+        body: { command: commandString }
+      });
+      alert(`Command sent: /${commandString}`);
+    } catch (err) {
+      alert(`Failed to execute command: ${err.message}`);
     }
   };
 
@@ -672,7 +702,7 @@ export default function ServerDetail() {
   };
 
   const handleDeleteSchedule = async (scheduleId) => {
-    if (!confirm('Are you sure you want to delete this scheduled task?')) return;
+    if (!await showConfirm('Are you sure you want to delete this scheduled task?', { title: 'Delete Schedule', isDanger: true })) return;
     try {
       await apiRequest(`/servers/${id}/schedules/${scheduleId}`, {
         method: 'DELETE'
@@ -793,6 +823,25 @@ export default function ServerDetail() {
 
   const handleInstallModFile = async (modFile) => {
     try {
+      // Check if there is an existing backup for this mod
+      const check = await apiRequest(`/mods/server/${id}/install-check?fileName=${encodeURIComponent(modFile.fileName)}`);
+      let restoreBackupId = null;
+
+      if (check.hasBackup && check.backups.length > 0) {
+        const newestBackup = check.backups[0];
+        const restoreConfirm = await showConfirm(
+          `We found a previous configuration/data backup for this mod (backed up on ${newestBackup.dateFormatted}). Would you like to restore this backup alongside the installation?`,
+          {
+            title: 'Restore Previous Backup?',
+            confirmText: 'Restore Backup',
+            cancelText: 'Install Clean',
+          }
+        );
+        if (restoreConfirm) {
+          restoreBackupId = newestBackup.id;
+        }
+      }
+
       await apiRequest(`/mods/server/${id}/install`, {
         method: 'POST',
         body: {
@@ -801,10 +850,16 @@ export default function ServerDetail() {
           fileId: modFile.id,
           downloadUrl: modFile.downloadUrl,
           fileName: modFile.fileName,
-          sha1: modFile.hashes?.find(h => h.algo === 1)?.value || null
+          sha1: modFile.hashes?.find(h => h.algo === 1)?.value || null,
+          restoreBackupId
         }
       });
-      alert(`Mod download for "${modFile.fileName}" started in the background.`);
+      
+      const successMsg = restoreBackupId 
+        ? `Mod installation for "${modFile.fileName}" started in the background (restored config backup!).`
+        : `Mod download for "${modFile.fileName}" started in the background.`;
+      
+      alert(successMsg);
       fetchActiveDownloads();
     } catch (err) {
       alert(err.message);
@@ -824,11 +879,22 @@ export default function ServerDetail() {
   };
 
   const handleDeleteMod = async (fileName) => {
-    if (!confirm(`Are you sure you want to delete mod file "${fileName}"?`)) return;
+    // Find the mod in our state list to check associated folders
+    const mod = installedMods.find(m => m.fileName === fileName);
+    let deleteFoldersAction = 'keep';
+
+    if (mod && mod.associatedFolders && mod.associatedFolders.length > 0) {
+      const choice = await showModDeleteConfirm(fileName, mod.associatedFolders);
+      if (choice === 'cancel') return;
+      deleteFoldersAction = choice;
+    } else {
+      if (!await showConfirm(`Are you sure you want to delete mod file "${fileName}"?`, { title: 'Delete Mod', isDanger: true })) return;
+    }
+
     try {
       await apiRequest(`/mods/server/${id}`, {
         method: 'DELETE',
-        body: { fileName }
+        body: { fileName, deleteFoldersAction }
       });
       fetchInstalledMods();
     } catch (err) {
@@ -871,7 +937,7 @@ export default function ServerDetail() {
   };
 
   const handleRestoreBackup = async (fileName) => {
-    if (!confirm('WARNING: Restoring a backup will overwrite current server files. Are you sure you want to proceed?')) return;
+    if (!await showConfirm('WARNING: Restoring a backup will overwrite current server files. Are you sure you want to proceed?', { title: 'Restore Backup', confirmText: 'Restore', isDanger: true })) return;
     try {
       await apiRequest(`/servers/${id}/backups/restore`, {
         method: 'POST',
@@ -884,7 +950,7 @@ export default function ServerDetail() {
   };
 
   const handleDeleteBackup = async (fileName) => {
-    if (!confirm(`Permanently delete backup file "${fileName}"?`)) return;
+    if (!await showConfirm(`Permanently delete backup file "${fileName}"?`, { title: 'Delete Backup', isDanger: true })) return;
     try {
       await apiRequest(`/servers/${id}/backups`, {
         method: 'DELETE',
@@ -930,7 +996,7 @@ export default function ServerDetail() {
     }
 
     const confirmMsg = `Are you sure you want to permanently delete the server profile "${server.name}"? This action removes database records and assigned user scopes. Disk files will remain safe in "${server.install_path}".`;
-    if (!confirm(confirmMsg)) return;
+    if (!await showConfirm(confirmMsg, { title: 'Delete Server Profile', isDanger: true })) return;
 
     try {
       await apiRequest(`/servers/${id}`, {
@@ -1208,9 +1274,9 @@ export default function ServerDetail() {
             <div className="glass-panel" style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
               {/* Process Performance Charts */}
               <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '16px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em', margin: 0 }}>
-                    Metrics ({metricsRange})
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                    System Metrics ({metricsRange})
                   </h3>
                   <div style={{ display: 'flex', gap: '2px', backgroundColor: 'rgba(0,0,0,0.4)', padding: '2px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                     {['1m', '30m', '1h'].map((r) => (
@@ -1234,12 +1300,28 @@ export default function ServerDetail() {
                     ))}
                   </div>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ height: '75px', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '6px', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                    {renderSVGChart('cpu')}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: '500' }}>
+                      <span>CPU Utilization</span>
+                      <span style={{ color: '#10b981', fontWeight: '600' }}>
+                        {metrics.length > 0 ? `${metrics[metrics.length - 1].cpu_percentage}%` : '0%'}
+                      </span>
+                    </div>
+                    <div style={{ height: '120px', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                      {renderSVGChart('cpu')}
+                    </div>
                   </div>
-                  <div style={{ height: '75px', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '6px', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.2)' }}>
-                    {renderSVGChart('ram')}
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: '500' }}>
+                      <span>Memory Utilization</span>
+                      <span style={{ color: '#3b82f6', fontWeight: '600' }}>
+                        {metrics.length > 0 ? `${(metrics[metrics.length - 1].ram_bytes / (1024*1024*1024)).toFixed(2)} GB` : '0.00 GB'}
+                      </span>
+                    </div>
+                    <div style={{ height: '120px', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.25)' }}>
+                      {renderSVGChart('ram')}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1343,59 +1425,137 @@ export default function ServerDetail() {
                 <div style={{ textAlign: 'right' }}>Actions</div>
               </div>
 
-              {filesList.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dark)', fontSize: '14px' }}>
-                  Directory is empty.
-                </div>
-              ) : (
-                filesList.map((file) => (
-                  <div 
-                    key={file.name} 
-                    onClick={() => handleFileClick(file)}
-                    style={{ 
-                      display: 'grid', 
-                      gridTemplateColumns: '3fr 1fr 1fr 1fr', 
-                      padding: '12px 8px', 
-                      borderRadius: '6px', 
-                      cursor: 'pointer',
-                      fontSize: '13px',
-                      alignItems: 'center',
-                      transition: 'background-color 0.2s'
-                    }}
-                    className="glass-card"
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: file.isDir ? '600' : '400' }}>
-                      <span>{file.isDir ? '📁' : '📄'}</span>
-                      {file.name}
-                    </div>
-                    <div style={{ color: 'var(--text-muted)' }}>{file.isDir ? 'Folder' : 'File'}</div>
-                    <div style={{ color: 'var(--text-muted)' }}>
-                      {file.isDir ? '-' : `${(file.size / 1024).toFixed(1)} KB`}
-                    </div>
-                    <div style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
-                      {!file.isDir && (
-                        <a 
-                          href={`${API_BASE_URL}/files/download?serverId=${id}&relPath=${encodeURIComponent(currentRelPath ? `${currentRelPath}/${file.name}` : file.name)}&token=${getToken()}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn btn-secondary"
-                          style={{ padding: '2px 8px', fontSize: '11px', marginRight: '6px', display: 'inline-block', textDecoration: 'none' }}
-                        >
-                          Download
-                        </a>
-                      )}
-                      <button 
-                        onClick={() => handleDeletePath(file.name)} 
-                        className="btn btn-secondary" 
-                        style={{ padding: '2px 8px', fontSize: '11px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
-                        disabled={isViewer}
-                      >
-                        Delete
-                      </button>
-                    </div>
+              {(() => {
+                const getFileIcon = (file) => {
+                  if (file.isDir) {
+                    return (
+                      <span style={{ fontSize: '16px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', backgroundColor: 'rgba(245, 158, 11, 0.1)', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.2)' }}>
+                        📂
+                      </span>
+                    );
+                  }
+
+                  const ext = file.name.split('.').pop().toLowerCase();
+                  let icon = '📄';
+                  let bgColor = 'rgba(255, 255, 255, 0.03)';
+                  let borderColor = 'rgba(255, 255, 255, 0.1)';
+                  let textColor = 'var(--text-main)';
+
+                  if (ext === 'jar') {
+                    icon = '☕';
+                    bgColor = 'rgba(244, 63, 94, 0.1)';
+                    borderColor = 'rgba(244, 63, 94, 0.25)';
+                    textColor = 'var(--error)';
+                  } else if (ext === 'json') {
+                    icon = '⚙️';
+                    bgColor = 'rgba(245, 158, 11, 0.1)';
+                    borderColor = 'rgba(245, 158, 11, 0.25)';
+                    textColor = 'var(--primary)';
+                  } else if (ext === 'zip' || ext === 'tar' || ext === 'gz' || ext === 'rar') {
+                    icon = '📦';
+                    bgColor = 'rgba(16, 185, 129, 0.1)';
+                    borderColor = 'rgba(16, 185, 129, 0.25)';
+                    textColor = 'var(--success)';
+                  } else if (ext === 'yml' || ext === 'yaml' || ext === 'properties' || ext === 'cfg') {
+                    icon = '📝';
+                    bgColor = 'rgba(59, 130, 246, 0.1)';
+                    borderColor = 'rgba(59, 130, 246, 0.25)';
+                    textColor = 'var(--secondary)';
+                  } else if (ext === 'txt' || ext === 'log') {
+                    icon = '🗒️';
+                    bgColor = 'rgba(156, 163, 175, 0.1)';
+                    borderColor = 'rgba(156, 163, 175, 0.25)';
+                    textColor = 'var(--text-muted)';
+                  } else if (ext === 'sh' || ext === 'bat') {
+                    icon = '⚡';
+                    bgColor = 'rgba(217, 119, 6, 0.1)';
+                    borderColor = 'rgba(217, 119, 6, 0.25)';
+                    textColor = 'var(--warning)';
+                  }
+
+                  return (
+                    <span 
+                      style={{ 
+                        fontSize: '16px', 
+                        display: 'inline-flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'center', 
+                        width: '28px', 
+                        height: '28px', 
+                        backgroundColor: bgColor, 
+                        borderRadius: '6px', 
+                        border: `1px solid ${borderColor}`,
+                        color: textColor
+                      }}
+                    >
+                      {icon}
+                    </span>
+                  );
+                };
+
+                return filesList.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dark)', fontSize: '14px' }}>
+                    Directory is empty.
                   </div>
-                ))
-              )}
+                ) : (
+                  filesList.map((file) => (
+                    <div 
+                      key={file.name} 
+                      onClick={() => handleFileClick(file)}
+                      style={{ 
+                        display: 'grid', 
+                        gridTemplateColumns: '3fr 1fr 1fr 1fr', 
+                        padding: '10px 8px', 
+                        borderRadius: '8px', 
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                        alignItems: 'center',
+                        transition: 'background-color 0.2s',
+                        marginBottom: '4px'
+                      }}
+                      className="glass-card"
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontWeight: file.isDir ? '600' : '400' }}>
+                        {getFileIcon(file)}
+                        <span style={{ color: file.isDir ? 'var(--primary)' : 'var(--text-main)' }}>{file.name}</span>
+                      </div>
+                      <div>
+                        {file.isDir ? (
+                          <span className="badge badge-secondary" style={{ fontSize: '10px', padding: '2px 8px' }}>Folder</span>
+                        ) : (
+                          <span className="badge badge-warning" style={{ fontSize: '10px', padding: '2px 8px', backgroundColor: 'rgba(255,255,255,0.03)', color: 'var(--text-muted)', border: '1px solid var(--border)' }}>
+                            {file.name.split('.').pop().toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ color: 'var(--text-muted)' }}>
+                        {file.isDir ? '-' : `${(file.size / 1024).toFixed(1)} KB`}
+                      </div>
+                      <div style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                        {!file.isDir && (
+                          <a 
+                            href={`${API_BASE_URL}/files/download?serverId=${id}&relPath=${encodeURIComponent(currentRelPath ? `${currentRelPath}/${file.name}` : file.name)}&token=${getToken()}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn btn-secondary"
+                            style={{ padding: '2px 8px', fontSize: '11px', marginRight: '6px', display: 'inline-block', textDecoration: 'none' }}
+                          >
+                            Download
+                          </a>
+                        )}
+                        <button 
+                          onClick={() => handleDeletePath(file.name)} 
+                          className="btn btn-secondary" 
+                          style={{ padding: '2px 8px', fontSize: '11px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
+                          disabled={isViewer}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                );
+              })()}
             </div>
 
             {/* In-Browser Code File Editor Overlay */}
@@ -1453,26 +1613,125 @@ export default function ServerDetail() {
 
               {/* Active Downloads HUD */}
               {activeDownloads.length > 0 && (
-                <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.05)', border: '1px solid var(--primary-border)', borderRadius: '8px', padding: '16px', marginBottom: '20px' }}>
-                  <h4 style={{ fontSize: '13px', color: 'var(--primary)', fontWeight: 'bold', marginBottom: '12px' }}>Background Downloads progress</h4>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {activeDownloads.map((dl) => (
-                      <div key={dl.downloadId} style={{ display: 'grid', gridTemplateColumns: '2fr 3fr 1fr', alignItems: 'center', gap: '16px', fontSize: '12px' }}>
-                        <div>{dl.fileName}</div>
+                <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                    <h4 style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+                      Background Downloads
+                    </h4>
+                    <span style={{ fontSize: '11px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '10px', padding: '1px 7px', fontWeight: '600' }}>
+                      {activeDownloads.length}
+                    </span>
+                  </div>
+
+                  {activeDownloads.map((dl) => {
+                    const isFailed = dl.status === 'failed';
+                    const isCompleted = dl.status === 'completed';
+                    const isVerifying = dl.status === 'verifying';
+                    const isActive = dl.status === 'downloading';
+
+                    const barColor = isFailed
+                      ? 'var(--error)'
+                      : isCompleted
+                      ? 'var(--success)'
+                      : 'var(--primary)';
+
+                    const badgeStyle = isFailed
+                      ? { backgroundColor: 'rgba(244,63,94,0.12)', color: 'var(--error)', border: '1px solid rgba(244,63,94,0.35)' }
+                      : isCompleted
+                      ? { backgroundColor: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.35)' }
+                      : isVerifying
+                      ? { backgroundColor: 'rgba(245,158,11,0.12)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.35)' }
+                      : { backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', border: '1px solid var(--primary-border)' };
+
+                    const formatBytes = (b) => {
+                      if (!b) return '0 B';
+                      if (b < 1024) return `${b} B`;
+                      if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+                      return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+                    };
+
+                    return (
+                      <div
+                        key={dl.downloadId}
+                        style={{
+                          backgroundColor: isFailed ? 'rgba(244,63,94,0.04)' : isCompleted ? 'rgba(16,185,129,0.04)' : 'var(--primary-glow)',
+                          border: `1px solid ${isFailed ? 'rgba(244,63,94,0.2)' : isCompleted ? 'rgba(16,185,129,0.2)' : 'var(--primary-border)'}`,
+                          borderRadius: '10px',
+                          padding: '12px 14px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                        }}
+                      >
+                        {/* Top row: filename + badge + dismiss */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <div style={{ flex: 1, height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                            <div style={{ width: `${dl.progress}%`, height: '100%', backgroundColor: 'var(--primary)' }}></div>
-                          </div>
-                          <span>{dl.progress}%</span>
+                          <span style={{ fontSize: '13px', fontWeight: '600', fontFamily: 'var(--font-mono)', color: 'var(--text-main)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {dl.fileName}
+                          </span>
+                          <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', borderRadius: '6px', padding: '2px 8px', whiteSpace: 'nowrap', ...badgeStyle }}>
+                            {isVerifying ? 'Verifying' : isActive ? 'Downloading' : isCompleted ? 'Complete' : 'Failed'}
+                          </span>
+                          {(isFailed || isCompleted) && (
+                            <button
+                              onClick={() => setActiveDownloads(prev => prev.filter(d => d.downloadId !== dl.downloadId))}
+                              style={{ background: 'none', border: 'none', color: 'var(--text-dark)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                              title="Dismiss"
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
-                        <div style={{ color: dl.status === 'failed' ? 'var(--error)' : 'var(--text-muted)' }}>
-                          {dl.status}
+
+                        {/* Progress bar */}
+                        <div style={{ position: 'relative', width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${dl.progress || 0}%`,
+                            height: '100%',
+                            backgroundColor: barColor,
+                            boxShadow: isFailed ? 'none' : `0 0 8px ${barColor}`,
+                            borderRadius: '3px',
+                            transition: 'width 0.4s ease-in-out',
+                          }} />
+                          {isActive && (
+                            <div style={{
+                              position: 'absolute',
+                              top: 0, left: 0,
+                              width: '100%', height: '100%',
+                              background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%)',
+                              animation: 'shimmer 1.4s infinite',
+                            }} />
+                          )}
+                        </div>
+
+                        {/* Bottom row: progress details or error */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                          {isFailed ? (
+                            <span style={{ color: 'var(--error)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                              <span>⚠</span>
+                              <span>{dl.error || 'Download failed. Check your connection or URL.'}</span>
+                            </span>
+                          ) : (
+                            <span style={{ color: 'var(--text-dark)' }}>
+                              {isCompleted
+                                ? `✓ ${formatBytes(dl.downloadedBytes)} — installed successfully`
+                                : isVerifying
+                                ? 'Verifying SHA1 checksum...'
+                                : dl.totalBytes > 0
+                                ? `${formatBytes(dl.downloadedBytes)} / ${formatBytes(dl.totalBytes)}`
+                                : `${formatBytes(dl.downloadedBytes)} downloaded`}
+                            </span>
+                          )}
+                          <span style={{ color: isFailed ? 'var(--error)' : isCompleted ? 'var(--success)' : 'var(--primary)', fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>
+                            {dl.progress || 0}%
+                          </span>
                         </div>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })}
                 </div>
               )}
+
+
 
               {/* Installed List */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -1503,7 +1762,25 @@ export default function ServerDetail() {
                       className="glass-card"
                     >
                       <div>
-                        <div style={{ fontWeight: '600' }}>{mod.name}</div>
+                        <div style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span>{mod.name}</span>
+                          {mod.associatedFolders && mod.associatedFolders.length > 0 && (
+                            <span 
+                              style={{ 
+                                backgroundColor: 'rgba(245, 158, 11, 0.1)', 
+                                border: '1px solid rgba(245, 158, 11, 0.3)', 
+                                borderRadius: '4px', 
+                                padding: '2px 6px', 
+                                fontSize: '10px', 
+                                color: 'var(--primary)',
+                                fontWeight: '500'
+                              }}
+                              title={`Associated data folders: ${mod.associatedFolders.join(', ')}`}
+                            >
+                              📂 {mod.associatedFolders.length} Data Folder{mod.associatedFolders.length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-dark)', fontFamily: 'var(--font-mono)' }}>{mod.fileName}</div>
                         {mod.conflicts.map((conf, cIdx) => (
                           <div key={cIdx} style={{ color: 'var(--error)', fontSize: '11px', marginTop: '4px' }}>
@@ -1858,7 +2135,7 @@ export default function ServerDetail() {
         {activeTab === 'players' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             {/* Active Players HUD */}
-            <div className="glass-panel animate-fade-in" style={{ marginBottom: '-16px' }}>
+            <div className="glass-panel animate-fade-in">
               <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px' }}>
                 Active Online Players
               </h3>
@@ -1867,23 +2144,244 @@ export default function ServerDetail() {
                   No players currently online. The panel polls the active Hytale console session every 90 seconds.
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
                   {onlinePlayers.map((player) => (
                     <div 
                       key={player} 
                       style={{ 
                         backgroundColor: 'var(--bg-panel-hover)', 
                         border: '1px solid var(--border)', 
-                        borderRadius: '8px', 
-                        padding: '10px 16px', 
+                        borderRadius: '12px', 
+                        padding: '16px 20px', 
                         fontSize: '14px', 
                         display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '10px' 
+                        flexDirection: 'column', 
+                        gap: '14px',
+                        minWidth: '280px',
+                        flex: '1 1 300px',
+                        boxShadow: 'var(--shadow-md)'
                       }}
                     >
-                      <span className="status-dot active"></span>
-                      <strong style={{ color: 'var(--text-main)' }}>{player}</strong>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span className="status-dot active"></span>
+                          <strong style={{ color: 'var(--text-main)', fontSize: '16px' }}>{player}</strong>
+                        </div>
+                        <span style={{ fontSize: '11px', color: 'var(--success)', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.05em' }}>Online</span>
+                      </div>
+
+                      {/* Command Buttons Grid */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
+                          onClick={() => handlePlayerCommand(`op add ${player}`)}
+                          disabled={isViewer}
+                        >
+                          👑 OP Add
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
+                          onClick={() => handlePlayerCommand(`op remove ${player}`)}
+                          disabled={isViewer}
+                        >
+                          🛡️ OP Remove
+                        </button>
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
+                          onClick={() => handlePlayerCommand(`heal ${player}`)}
+                          disabled={isViewer}
+                        >
+                          ❤️ Heal
+                        </button>
+                        <button 
+                          className="btn btn-danger" 
+                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
+                          onClick={async () => {
+                            if (await showConfirm(`Kick player ${player}?`, { title: 'Kick Player', confirmText: 'Kick', isDanger: true })) {
+                              handlePlayerCommand(`kick ${player}`);
+                            }
+                          }}
+                          disabled={isViewer}
+                        >
+                          🚪 Kick
+                        </button>
+                      </div>
+
+                      {/* Dropdowns / Complex Actions */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
+                        {/* Gamemode Selector */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Game Mode:</span>
+                          <select 
+                            style={{ 
+                              backgroundColor: '#050608', 
+                              color: 'var(--text-main)', 
+                              border: '1px solid var(--border)', 
+                              borderRadius: '4px', 
+                              padding: '4px 8px', 
+                              fontSize: '11px',
+                              outline: 'none',
+                              cursor: isViewer ? 'not-allowed' : 'pointer'
+                            }}
+                            disabled={isViewer}
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                handlePlayerCommand(`gamemode ${player} ${e.target.value}`);
+                                e.target.value = ''; // Reset selector
+                              }
+                            }}
+                          >
+                            <option value="">Select Mode...</option>
+                            <option value="creative">Creative</option>
+                            <option value="adventure">Adventure</option>
+                            <option value="survival">Survival</option>
+                            <option value="spectator">Spectator</option>
+                          </select>
+                        </div>
+
+                        {/* Teleport Coordinates Input */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input 
+                            id={`tp-coords-${player}`}
+                            type="text" 
+                            placeholder="x,y,z or Player" 
+                            style={{ 
+                              backgroundColor: '#050608', 
+                              color: 'var(--text-main)', 
+                              border: '1px solid var(--border)', 
+                              borderRadius: '4px', 
+                              padding: '4px 8px', 
+                              fontSize: '11px', 
+                              flex: '1',
+                              outline: 'none'
+                            }}
+                            disabled={isViewer}
+                          />
+                          <button 
+                            className="btn btn-primary" 
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
+                            onClick={() => {
+                              const input = document.getElementById(`tp-coords-${player}`);
+                              const val = input ? input.value.trim() : '';
+                              if (!val) {
+                                alert('Please specify target player or coordinates (e.g. 100,50,-200)');
+                                return;
+                              }
+                              const target = val.includes(',') ? val.split(',').map(c => c.trim()).join(' ') : val;
+                              handlePlayerCommand(`tp ${player} ${target}`);
+                            }}
+                            disabled={isViewer}
+                          >
+                            ⚡ TP
+                          </button>
+                        </div>
+
+                        {/* Ban Button */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                          <button 
+                            className="btn btn-danger" 
+                            style={{ padding: '4px 10px', fontSize: '11px', backgroundColor: 'transparent', borderColor: 'var(--error)', color: 'var(--error)' }}
+                            onClick={async () => {
+                              if (await showConfirm(`Ban player ${player} permanently?`, { title: 'Ban Player', confirmText: 'Ban', isDanger: true })) {
+                                handlePlayerCommand(`ban ${player}`);
+                              }
+                            }}
+                            disabled={isViewer}
+                          >
+                            🚫 Permanent Ban
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Player Connection History Log */}
+            <div className="glass-panel animate-fade-in" style={{ marginTop: '-16px' }}>
+              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span>Recent Connection History</span>
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ padding: '4px 12px', fontSize: '12px' }} 
+                  onClick={fetchPlayerHistory}
+                >
+                  🔄 Refresh History
+                </button>
+              </h3>
+              {playerHistory.length === 0 ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+                  No connection events recorded yet. Connect to the server to populate logs.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', paddingRight: '8px' }}>
+                  {playerHistory.map((item, idx) => (
+                    <div 
+                      key={idx} 
+                      style={{ 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        justifyContent: 'space-between', 
+                        padding: '12px 16px', 
+                        backgroundColor: 'rgba(255,255,255,0.01)', 
+                        border: '1px solid var(--border)', 
+                        borderRadius: '8px',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span 
+                          style={{ 
+                            width: '8px', 
+                            height: '8px', 
+                            borderRadius: '50%', 
+                            backgroundColor: item.event === 'join' ? 'var(--success)' : 'var(--error)',
+                            boxShadow: item.event === 'join' ? '0 0 8px var(--success)' : '0 0 8px var(--error)'
+                          }}
+                        ></span>
+                        <strong style={{ color: 'var(--text-main)' }}>{item.player}</strong>
+                        <span style={{ color: 'var(--text-muted)' }}>
+                          {item.event === 'join' ? 'joined the server' : 'left the server'}
+                        </span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                        <span style={{ color: 'var(--text-dark)', fontSize: '11px' }}>
+                          {new Date(item.timestamp).toLocaleString()}
+                        </span>
+                        {item.event === 'leave' && (
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '2px 8px', fontSize: '10px' }}
+                            onClick={async () => {
+                              if (await showConfirm(`Ban player ${item.player} permanently?`, { title: 'Ban Player', confirmText: 'Ban', isDanger: true })) {
+                                handlePlayerCommand(`ban ${item.player}`);
+                              }
+                            }}
+                            disabled={isViewer}
+                          >
+                            🚫 Ban
+                          </button>
+                        )}
+                        {item.event === 'join' && (
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '2px 8px', fontSize: '10px' }}
+                            onClick={async () => {
+                              if (await showConfirm(`Kick player ${item.player}?`, { title: 'Kick Player', confirmText: 'Kick', isDanger: true })) {
+                                handlePlayerCommand(`kick ${item.player}`);
+                              }
+                            }}
+                            disabled={isViewer}
+                          >
+                            🚪 Kick
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -1891,7 +2389,7 @@ export default function ServerDetail() {
             </div>
 
             {/* Whitelist and Bans Editors */}
-            <div className="glass-panel animate-fade-in">
+            <div className="glass-panel animate-fade-in" style={{ marginTop: '-16px' }}>
               <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '24px' }}>
                 Player Access Permissions
               </h3>

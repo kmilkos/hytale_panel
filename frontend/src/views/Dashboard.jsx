@@ -267,6 +267,11 @@ export default function Dashboard() {
                   required
                   disabled={creating}
                 />
+                {name.trim() && (
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', fontFamily: 'var(--font-mono)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    Generated Slug: <span style={{ color: 'var(--primary)', fontWeight: '600' }}>{name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '')}</span>
+                  </div>
+                )}
               </div>
 
               <div className="form-group">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiRequest, getUser, clearToken, API_BASE_URL, getToken } from '../utils/api';
+import { showConfirm } from '../utils/confirm';
 
 export default function SystemSettings() {
   const [user, setUser] = useState(null);
@@ -180,7 +181,7 @@ export default function SystemSettings() {
   };
 
   const handleDeleteUser = async (userId, username) => {
-    if (!confirm(`Are you sure you want to permanently delete user account "${username}"?`)) return;
+    if (!await showConfirm(`Are you sure you want to permanently delete user account "${username}"?`, { title: 'Delete User Account', isDanger: true })) return;
     try {
       await apiRequest(`/system/users/${userId}`, {
         method: 'DELETE'
@@ -370,7 +371,37 @@ export default function SystemSettings() {
 
             <form onSubmit={handleSaveSettings}>
               <div className="form-group">
-                <label className="form-label">CurseForge API Key</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ margin: 0 }}>CurseForge API Key</label>
+                  <a
+                    href="https://console.curseforge.com/#/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      color: 'var(--primary)',
+                      textDecoration: 'none',
+                      border: '1px solid rgba(99, 102, 241, 0.4)',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      transition: 'all 0.2s',
+                      backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.18)'; e.currentTarget.style.borderColor = 'var(--primary)'; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.08)'; e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'; }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                    Get API Key
+                  </a>
+                </div>
                 <input
                   type="password"
                   className="form-input"
@@ -383,7 +414,37 @@ export default function SystemSettings() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Nexus Mods Personal API Key</label>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <label className="form-label" style={{ margin: 0 }}>Nexus Mods Personal API Key</label>
+                  <a
+                    href="https://next.nexusmods.com/settings/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '5px',
+                      fontSize: '11px',
+                      fontWeight: '600',
+                      color: '#d97706',
+                      textDecoration: 'none',
+                      border: '1px solid rgba(217, 119, 6, 0.4)',
+                      borderRadius: '5px',
+                      padding: '3px 8px',
+                      transition: 'all 0.2s',
+                      backgroundColor: 'rgba(217, 119, 6, 0.08)',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'rgba(217, 119, 6, 0.18)'; e.currentTarget.style.borderColor = '#d97706'; }}
+                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'rgba(217, 119, 6, 0.08)'; e.currentTarget.style.borderColor = 'rgba(217, 119, 6, 0.4)'; }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                      <polyline points="15 3 21 3 21 9"/>
+                      <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                    Get API Key
+                  </a>
+                </div>
                 <input
                   type="password"
                   className="form-input"
