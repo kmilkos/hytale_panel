@@ -1,9 +1,9 @@
 export const API_BASE_URL = window.location.port === '5173'
-  ? 'http://localhost:5600/api'
+  ? `http://${window.location.hostname || 'localhost'}:5600/api`
   : '/api';
 
 export const WS_BASE_URL = window.location.port === '5173'
-  ? 'ws://localhost:5600/ws'
+  ? `ws://${window.location.hostname || 'localhost'}:5600/ws`
   : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
 
 export function getToken() {
