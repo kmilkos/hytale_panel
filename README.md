@@ -4,6 +4,19 @@ A state-of-the-art, high-fidelity dark-themed glassmorphic cluster management da
 
 ---
 
+## 📸 Visual Showcase
+
+### 📊 Main Cluster Dashboard
+![Hytale Cluster Control Panel Dashboard](docs/images/app_main_page.png)
+
+### 💻 Interactive Server Console & Real-time Resource Graphs
+![Hytale Server Console & Real-time Resource Graphs](docs/images/server_console.png)
+
+### 📦 CurseForge Mod Browser & Advanced Cleanup Manager
+![Hytale Mod Browser & Management Interface](docs/images/mod_management.png)
+
+---
+
 ## 🚀 Core Features
 
 ### 1. Central Installer Cache Pipeline
