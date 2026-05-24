@@ -1068,12 +1068,13 @@ export default function ServerDetail() {
             {activeTab === 'console' && (
           <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '24px', height: '600px' }}>
             {/* Log display */}
-            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', padding: '16px' }}>
+            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, padding: '16px' }}>
               <div 
                 ref={consoleContainerRef}
                 onScroll={handleConsoleScroll}
                 style={{
                   flex: 1,
+                  minHeight: 0,
                   backgroundColor: '#050608',
                   borderRadius: '8px',
                   padding: '16px',
@@ -1176,7 +1177,7 @@ export default function ServerDetail() {
             </div>
 
             {/* Classification sidebar */}
-            <div className="glass-panel" style={{ height: '100%', display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
+            <div className="glass-panel" style={{ height: '100%', minHeight: 0, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
               {/* Process Performance Charts */}
               <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
