@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { apiRequest, WS_BASE_URL, getToken, getUser } from '../utils/api';
+import { apiRequest, API_BASE_URL, WS_BASE_URL, getToken, getUser } from '../utils/api';
 
 export default function ServerDetail() {
   const { id } = useParams();
