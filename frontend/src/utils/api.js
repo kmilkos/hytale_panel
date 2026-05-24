@@ -1,10 +1,15 @@
+const hostname = window.location.hostname || '127.0.0.1';
+const host = window.location.host || '127.0.0.1:5600';
+const cleanHostname = hostname === 'localhost' ? '127.0.0.1' : hostname;
+const cleanHost = host.startsWith('localhost') ? host.replace('localhost', '127.0.0.1') : host;
+
 export const API_BASE_URL = window.location.port === '5173'
-  ? `http://${window.location.hostname || 'localhost'}:5600/api`
+  ? `http://${cleanHostname}:5600/api`
   : '/api';
 
 export const WS_BASE_URL = window.location.port === '5173'
-  ? `ws://${window.location.hostname || 'localhost'}:5600/ws`
-  : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+  ? `ws://${cleanHostname}:5600/ws`
+  : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${cleanHost}/ws`;
 
 export function getToken() {
   return localStorage.getItem('token');

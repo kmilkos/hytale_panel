@@ -68,6 +68,7 @@ export default function ServerDetail() {
   const [metricsRange, setMetricsRange] = useState('30m');
   const metricsRangeRef = useRef('30m');
   const wsRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   // 2. Files Tab State
   const [currentRelPath, setCurrentRelPath] = useState('');
@@ -108,6 +109,7 @@ export default function ServerDetail() {
   const [savingPlayers, setSavingPlayers] = useState(false);
 
   useEffect(() => {
+    isMountedRef.current = true;
     setCurrentUser(getUser());
     fetchServerDetails();
     fetchBackups();
@@ -121,6 +123,7 @@ export default function ServerDetail() {
     const metricsInterval = setInterval(fetchMetrics, 15000);
 
     return () => {
+      isMountedRef.current = false;
       clearInterval(dlInterval);
       clearInterval(metricsInterval);
       if (wsRef.current) wsRef.current.close();
@@ -202,7 +205,7 @@ export default function ServerDetail() {
       if (wsRef.current === ws) {
         wsRef.current = null;
         setTimeout(() => {
-          if (activeTab === 'console') {
+          if (isMountedRef.current && activeTab === 'console') {
             connectWebSocket();
           }
         }, 3000);
