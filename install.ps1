@@ -88,6 +88,38 @@ Write-Host "[+] NPM version: $((npm -v))"
 Write-Host "[*] Navigating to project directory: $APP_DIR"
 Set-Location $APP_DIR
 
+# Configure default environment variables in backend/.env if missing
+$EnvFile = Join-Path $APP_DIR "backend\.env"
+if (-not (Test-Path $EnvFile)) {
+    Write-Host "[*] Creating default backend environment file (.env)..."
+    $defaultEnv = @"
+NODE_ENV=production
+PORT=5500
+HOST=0.0.0.0
+DB_PATH=data/hytale-manager.db
+SERVERS_DIR=servers
+UPLOADS_DIR=uploads
+LOG_LEVEL=info
+BCRYPT_COST=10
+"@
+    Set-Content -Path $EnvFile -Value $defaultEnv -Encoding utf8
+} else {
+    Write-Host "[*] Aligning SERVERS_DIR configuration inside .env..."
+    $envContent = Get-Content -Path $EnvFile
+    $hasServersDir = $false
+    for ($i = 0; $i -lt $envContent.Length; $i++) {
+        if ($envContent[$i] -match "^SERVERS_DIR=") {
+            $envContent[$i] = "SERVERS_DIR=servers"
+            $hasServersDir = $true
+            break
+        }
+    }
+    if (-not $hasServersDir) {
+        $envContent += "SERVERS_DIR=servers"
+    }
+    Set-Content -Path $EnvFile -Value $envContent -Encoding utf8
+}
+
 Write-Host "[*] Installing NPM workspace packages..."
 # Run npm install using cmd.exe to avoid powershell scripts policy locks
 cmd.exe /c "npm install"

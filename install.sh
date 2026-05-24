@@ -157,6 +157,30 @@ fi
 echo "[*] Navigating to: $APP_DIR"
 cd "$APP_DIR"
 
+# Configure default environment variables in backend/.env if missing
+ENV_FILE="backend/.env"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "[*] Creating default backend environment file (.env)..."
+  cat <<EOF > "$ENV_FILE"
+NODE_ENV=production
+PORT=5500
+HOST=0.0.0.0
+DB_PATH=data/hytale-manager.db
+SERVERS_DIR=servers
+UPLOADS_DIR=uploads
+LOG_LEVEL=info
+BCRYPT_COST=10
+EOF
+else
+  # Ensure SERVERS_DIR is set to 'servers' to match the root folder relocation
+  if grep -q "SERVERS_DIR=" "$ENV_FILE"; then
+    echo "[*] Aligning SERVERS_DIR configuration inside .env..."
+    sed -i 's|SERVERS_DIR=.*|SERVERS_DIR=servers|' "$ENV_FILE"
+  else
+    echo "SERVERS_DIR=servers" >> "$ENV_FILE"
+  fi
+fi
+
 # Configure npm to use python3 for native builds
 if command -v python3 &> /dev/null; then
   echo "[*] Configuring NPM to use Python3 for native C++ builds..."
