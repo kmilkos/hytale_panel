@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+                  "secondary": "#ffb95f",
+                  "inverse-surface": "#dae2fd",
+                  "inverse-primary": "#ee9800",
+                  "surface-container": "#171f33",
+                  "primary-fixed": "#ffddb8",
+                  "tertiary-fixed": "#ffddb8",
+                  "surface-dim": "#0b1326",
+                  "on-primary-fixed-variant": "#653e00",
+                  "primary-fixed-dim": "#ffb95f",
+                  "outline": "#948a85",
+                  "secondary-fixed-dim": "#ffb95f",
+                  "on-primary": "#472a00",
+                  "error-container": "#93000a",
+                  "error": "#ffb4ab",
+                  "on-secondary-container": "#5b3800",
+                  "surface-bright": "#31394d",
+                  "on-surface-variant": "#cabdbb",
+                  "on-primary-container": "#5b3800",
+                  "on-secondary-fixed": "#2a1700",
+                  "secondary-container": "#ee9800",
+                  "inverse-on-surface": "#283044",
+                  "on-tertiary": "#472a00",
+                  "surface-container-lowest": "#060e20",
+                  "on-tertiary-fixed-variant": "#653e00",
+                  "on-tertiary-fixed": "#2a1700",
+                  "tertiary-fixed-dim": "#ffb95f",
+                  "on-error-container": "#ffdad6",
+                  "tertiary-container": "#ee9800",
+                  "on-tertiary-container": "#5b3800",
+                  "tertiary": "#ffb95f",
+                  "on-background": "#dae2fd",
+                  "surface-variant": "#2d3449",
+                  "surface": "#0b1326",
+                  "on-error": "#690005",
+                  "surface-tint": "#ffb95f",
+                  "primary-container": "#ee9800",
+                  "surface-container-high": "#222a3d",
+                  "primary": "#ffb95f",
+                  "on-secondary-fixed-variant": "#653e00",
+                  "surface-container-highest": "#2d3449",
+                  "outline-variant": "#493c3c",
+                  "secondary-fixed": "#ffddb8",
+                  "background": "#0b1326",
+                  "on-surface": "#dae2fd",
+                  "on-secondary": "#472a00",
+                  "surface-container-low": "#131b2e",
+                  "on-primary-fixed": "#2a1700"
+          },
+          "borderRadius": {
+                  "DEFAULT": "0.125rem",
+                  "lg": "0.25rem",
+                  "xl": "0.5rem",
+                  "full": "0.75rem"
+          },
+          "spacing": {
+                  "xs": "0.5rem",
+                  "margin": "2rem",
+                  "gutter": "1.5rem",
+                  "md": "1.5rem",
+                  "base": "4px",
+                  "lg": "2rem",
+                  "sm": "1rem",
+                  "xl": "3rem"
+          },
+          "fontFamily": {
+                  "body-md": ["Inter"],
+                  "title-sm": ["Inter"],
+                  "body-sm": ["Inter"],
+                  "display-lg": ["Inter"],
+                  "label-caps": ["Inter"],
+                  "code": ["monospace"],
+                  "headline-md": ["Inter"]
+          },
+          "fontSize": {
+                  "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                  "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                  "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                  "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                  "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                  "code": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                  "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+          }
+        },
+      },
+    }
+  </script>
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+      display: inline-block;
+      line-height: 1;
+      text-transform: none;
+      letter-spacing: normal;
+      word-wrap: normal;
+      white-space: nowrap;
+      direction: ltr;
+    }
+    .glass-card {
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }
+  </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen selection:bg-primary selection:text-on-primary">
+<!-- NavigationDrawer -->
+<aside class="fixed left-0 top-0 h-full flex flex-col pt-4 bg-slate-950 h-screen w-64 border-r border-white/5 shadow-2xl shadow-black/50 z-50">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-8 h-8 bg-primary rounded flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary text-xl" data-icon="terminal">terminal</span>
+</div>
+<span class="text-primary font-black font-inter tracking-tighter text-xl">Hytale Command</span>
+</div>
+<div class="px-4 mb-6">
+<div class="flex items-center gap-3 p-3 rounded-lg bg-white/5">
+<div class="w-10 h-10 rounded-full overflow-hidden border border-white/10">
+<img alt="Server Admin" data-alt="A professional portrait of a tech-savvy system administrator with short hair and modern glasses. The lighting is moody with cool amber highlights reflecting off a glass surface in the background. The aesthetic is clean and high-tech, fitting a high-performance Hytale server dashboard environment with deep slate and amber tones." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDAmNNeRAX4F26z99XhAFjQ2BR4o0Vrx5tYSfyQwgn9CIv5yChHMjLIA5_M-wffrmOZM_Dpjjs7nb6lq05qaWzXY1XTo2qAWaqB5Zc3xJ9xNgqzDkA-lgY0uP02qEHoEn62Ez21hGElTrR0Jf8Yp2KNfwhDk7fkMROk0qAM03qzRkQUQdQgwf1GZho5Tu-ohdIKeoQfA9j2iS1LJwEGz4kppUzjaW_DU3NMDOH26p-pbyTchqlbanqWN0Sr4xmv_TOgnK8r7QhWyQ"/>
+</div>
+<div class="flex flex-col">
+<span class="font-inter text-sm font-medium text-on-surface">Server Admin</span>
+<span class="text-[10px] text-slate-400 uppercase tracking-widest">Hytale Node 01</span>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-3 space-y-1">
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-inter text-sm font-medium text-slate-400 hover:bg-white/5 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary" data-icon="dashboard">dashboard</span>
+        Dashboard
+      </a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-inter text-sm font-medium text-slate-400 hover:bg-white/5 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary" data-icon="installs">install_mobile</span>
+        Console
+      </a>
+<!-- Active Tab: Files -->
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-inter text-sm font-medium bg-primary/10 text-primary border-r-2 border-primary transition-colors group" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open" style="font-variation-settings: 'FILL' 1;">folder_open</span>
+        Files
+      </a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-inter text-sm font-medium text-slate-400 hover:bg-white/5 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary" data-icon="group">group</span>
+        Players
+      </a>
+<a class="flex items-center gap-3 px-3 py-2.5 rounded-lg font-inter text-sm font-medium text-slate-400 hover:bg-white/5 transition-colors group" href="#">
+<span class="material-symbols-outlined group-hover:text-primary" data-icon="settings">settings</span>
+        Settings
+      </a>
+</nav>
+<div class="p-6 border-t border-white/5 mt-auto">
+<div class="text-[10px] text-slate-500 font-code tracking-wider">SYSTEM STATUS: NOMINAL</div>
+<div class="text-[10px] text-primary/50 font-code tracking-wider mt-1">v1.4.2</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/10 shadow-[0_-1px_0_rgba(255,255,255,0.1)_inset]">
+<div class="flex items-center gap-4">
+<div class="text-primary font-bold tracking-tighter text-xl">Files</div>
+<div class="h-4 w-[1px] bg-white/10 mx-2"></div>
+<nav class="flex items-center gap-2 text-sm text-slate-400">
+<span class="hover:text-primary cursor-pointer transition-colors">home</span>
+<span class="material-symbols-outlined text-xs" data-icon="chevron_right">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">root</span>
+<span class="material-symbols-outlined text-xs" data-icon="chevron_right">chevron_right</span>
+<span class="text-on-surface font-medium">server_data</span>
+</nav>
+</div>
+<div class="flex items-center gap-4">
+<button class="bg-primary text-on-primary px-4 py-2 rounded font-inter text-sm font-semibold flex items-center gap-2 transition-all duration-200 active:scale-95 hover:shadow-[0_0_15px_rgba(255,185,95,0.4)]">
+<span class="material-symbols-outlined text-lg" data-icon="upload">upload</span>
+          Upload
+        </button>
+<div class="w-[1px] h-6 bg-white/10"></div>
+<button class="p-2 text-slate-400 hover:bg-white/5 hover:text-primary rounded-full transition-all">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</header>
+<section class="p-margin flex-1">
+<!-- File Management Container -->
+<div class="glass-card rounded-xl overflow-hidden">
+<!-- Table Header -->
+<div class="grid grid-cols-[1fr_200px_150px_180px] px-6 py-4 border-b border-white/5 text-label-caps text-slate-400 bg-white/5">
+<div>NAME</div>
+<div>SIZE</div>
+<div>MODIFIED</div>
+<div class="text-right">ACTIONS</div>
+</div>
+<!-- File List -->
+<div class="divide-y divide-white/5">
+<!-- Folder Item -->
+<div class="grid grid-cols-[1fr_200px_150px_180px] px-6 py-3 items-center hover:bg-white/[0.02] transition-colors group cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="folder" style="font-variation-settings: 'FILL' 1;">folder</span>
+<span class="font-body-sm font-medium text-on-surface group-hover:text-primary">logs/</span>
+</div>
+<div class="text-body-sm text-slate-500">--</div>
+<div class="text-body-sm text-slate-500">2h ago</div>
+<div class="flex justify-end gap-2">
+<button class="p-1.5 text-slate-400 hover:text-primary hover:bg-white/5 rounded transition-all" title="Rename"><span class="material-symbols-outlined text-lg" data-icon="edit_note">edit_note</span></button>
+<button class="p-1.5 text-slate-400 hover:text-error hover:bg-error/10 rounded transition-all" title="Delete"><span class="material-symbols-outlined text-lg" data-icon="delete">delete</span></button>
+</div>
+</div>
+<!-- Folder Item -->
+<div class="grid grid-cols-[1fr_200px_150px_180px] px-6 py-3 items-center hover:bg-white/[0.02] transition-colors group cursor-pointer">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="folder" style="font-variation-settings: 'FILL' 1;">folder</span>
+<span class="font-body-sm font-medium text-on-surface group-hover:text-primary">mods/</span>
+</div>
+<div class="text-body-sm text-slate-500">--</div>
+<div class="text-body-sm text-slate-500">1d ago</div>
+<div class="flex justify-end gap-2">
+<button class="p-1.5 text-slate-400 hover:text-primary hover:bg-white/5 rounded transition-all" title="Rename"><span class="material-symbols-outlined text-lg" data-icon="edit_note">edit_note</span></button>
+<button class="p-1.5 text-slate-400 hover:text-error hover:bg-error/10 rounded transition-all" title="Delete"><span class="material-symbols-outlined text-lg" data-icon="delete">delete</span></button>
+</div>
+</div>
+<!-- File Item (Config) -->
+<div class="grid grid-cols-[1fr_200px_150px_180px] px-6 py-3 items-center hover:bg-white/[0.02] transition-colors group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary" data-icon="settings_applications">settings_applications</span>
+<span class="font-body-sm font-medium text-on-surface">server.properties</span>
+</div>
+<div class="text-body-sm text-slate-500">1.2 KB</div>
+<div class="text-body-sm text-slate-500">15m ago</div>
+<div class="flex justify-end gap-2">
+<button class="p-1.5 text-primary hover:bg-primary/10 rounded transition-all" title="Edit"><span class="material-symbols-outlined text-lg" data-icon="edit">edit</span></button>
+<button class="p-1.5 text-slate-400 hover:text-primary hover:bg-white/5 rounded transition-all" title="Rename"><span class="material-symbols-outlined text-lg" data-icon="edit_note">edit_note</span></button>
+<button class="p-1.5 text-slate-400 hover:text-error hover:bg-error/10 rounded transition-all" title="Delete"><span class="material-symbols-outlined text-lg" data-icon="delete">delete</span></button>
+</div>
+</div>
+<!-- File Item (Jar) -->
+<div class="grid grid-cols-[1fr_200px_150px_180px] px-6 py-3 items-center hover:bg-white/[0.02] transition-colors group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-secondary" data-icon="inventory_2">inventory_2</span>
+<span class="font-body-sm font-medium text-on-surface">hytale-server.jar</span>
+</div>
+<div class="text-body-sm text-slate-500">45.8 MB</div>
+<div class="text-body-sm text-slate-500">3d ago</div>
+<div class="flex justify-end gap-2">
+<button class="p-1.5 text-slate-400 hover:text-primary hover:bg-white/5 rounded transition-all" title="Rename"><span class="material-symbols-outlined text-lg" data-icon="edit_note">edit_note</span></button>
+<button class="p-1.5 text-slate-400 hover:text-error hover:bg-error/10 rounded transition-all" title="Delete"><span class="material-symbols-outlined text-lg" data-icon="delete">delete</span></button>
+</div>
+</div>
+<!-- File Item (JSON) -->
+<div class="grid grid-cols-[1fr_200px_150px_180px] px-6 py-3 items-center hover:bg-white/[0.02] transition-colors group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary-fixed" data-icon="data_object">data_object</span>
+<span class="font-body-sm font-medium text-on-surface">permissions.json</span>
+</div>
+<div class="text-body-sm text-slate-500">4 KB</div>
+<div class="text-body-sm text-slate-500">Just now</div>
+<div class="flex justify-end gap-2">
+<button class="p-1.5 text-primary hover:bg-primary/10 rounded transition-all" title="Edit"><span class="material-symbols-outlined text-lg" data-icon="edit">edit</span></button>
+<button class="p-1.5 text-slate-400 hover:text-primary hover:bg-white/5 rounded transition-all" title="Rename"><span class="material-symbols-outlined text-lg" data-icon="edit_note">edit_note</span></button>
+<button class="p-1.5 text-slate-400 hover:text-error hover:bg-error/10 rounded transition-all" title="Delete"><span class="material-symbols-outlined text-lg" data-icon="delete">delete</span></button>
+</div>
+</div>
+<!-- File Item (Whitelist) -->
+<div class="grid grid-cols-[1fr_200px_150px_180px] px-6 py-3 items-center hover:bg-white/[0.02] transition-colors group">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-slate-400" data-icon="description">description</span>
+<span class="font-body-sm font-medium text-on-surface">whitelist.txt</span>
+</div>
+<div class="text-body-sm text-slate-500">128 B</div>
+<div class="text-body-sm text-slate-500">Oct 12, 2023</div>
+<div class="flex justify-end gap-2">
+<button class="p-1.5 text-primary hover:bg-primary/10 rounded transition-all" title="Edit"><span class="material-symbols-outlined text-lg" data-icon="edit">edit</span></button>
+<button class="p-1.5 text-slate-400 hover:text-primary hover:bg-white/5 rounded transition-all" title="Rename"><span class="material-symbols-outlined text-lg" data-icon="edit_note">edit_note</span></button>
+<button class="p-1.5 text-slate-400 hover:text-error hover:bg-error/10 rounded transition-all" title="Delete"><span class="material-symbols-outlined text-lg" data-icon="delete">delete</span></button>
+</div>
+</div>
+</div>
+</div>
+<!-- Quick Actions / Info Bento -->
+<div class="mt-8 grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<div class="glass-card p-6 rounded-xl flex items-center gap-4 border-l-4 border-l-primary">
+<div class="w-12 h-12 rounded bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-2xl" data-icon="storage">storage</span>
+</div>
+<div>
+<div class="text-label-caps text-slate-400 mb-1">STORAGE USED</div>
+<div class="text-title-sm font-bold text-on-surface">12.4 GB / 50 GB</div>
+<div class="w-full h-1.5 bg-white/5 rounded-full mt-2 overflow-hidden">
+<div class="w-1/4 h-full bg-primary"></div>
+</div>
+</div>
+</div>
+<div class="glass-card p-6 rounded-xl flex items-center gap-4">
+<div class="w-12 h-12 rounded bg-secondary/10 flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-2xl" data-icon="history">history</span>
+</div>
+<div>
+<div class="text-label-caps text-slate-400 mb-1">LAST BACKUP</div>
+<div class="text-title-sm font-bold text-on-surface">4 Hours Ago</div>
+<div class="text-body-sm text-slate-500 mt-1">Automatic sync complete</div>
+</div>
+</div>
+<div class="glass-card p-6 rounded-xl flex items-center gap-4">
+<div class="w-12 h-12 rounded bg-primary-fixed/10 flex items-center justify-center text-primary-fixed">
+<span class="material-symbols-outlined text-2xl" data-icon="shield">shield</span>
+</div>
+<div>
+<div class="text-label-caps text-slate-400 mb-1">FILE SECURITY</div>
+<div class="text-title-sm font-bold text-on-surface">Protected</div>
+<div class="text-body-sm text-slate-500 mt-1">Read/Write restricted</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Footer Status -->
+<footer class="h-10 border-t border-white/5 px-6 flex items-center justify-between bg-slate-950 text-[11px] font-code text-slate-500 uppercase tracking-widest">
+<div class="flex items-center gap-4">
+<span class="flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
+          Connected to Node-01
+        </span>
+<span class="text-white/10">|</span>
+<span>Lat: 24ms</span>
+</div>
+<div class="flex items-center gap-4">
+<span>Region: US-East-1</span>
+<span>SFTP: Enabled</span>
+</div>
+</footer>
+</main>
+<!-- FAB for New Content -->
+<button class="fixed bottom-12 right-12 w-14 h-14 bg-primary rounded-full shadow-[0_0_30px_rgba(255,185,95,0.3)] text-on-primary flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 group z-50">
+<span class="material-symbols-outlined text-3xl transition-transform group-hover:rotate-90" data-icon="add">add</span>
+</button>
+</body></html>

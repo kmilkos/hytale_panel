@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Hytale Command - Console</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary-container": "#ee9800",
+                    "surface-variant": "#2d3449",
+                    "surface-container-low": "#131b2e",
+                    "on-primary-fixed": "#2a1700",
+                    "error": "#ffb4ab",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "secondary-fixed-dim": "#ffb95f",
+                    "on-secondary-fixed-variant": "#653e00",
+                    "outline-variant": "#493c3c",
+                    "tertiary": "#ffb95f",
+                    "primary-fixed-dim": "#ffb95f",
+                    "on-primary-container": "#5b3800",
+                    "on-surface-variant": "#cabdbb",
+                    "on-background": "#dae2fd",
+                    "surface-container-highest": "#2d3449",
+                    "secondary-fixed": "#ffddb8",
+                    "on-tertiary": "#472a00",
+                    "surface-container": "#171f33",
+                    "outline": "#948a85",
+                    "secondary": "#ffb95f",
+                    "on-error": "#690005",
+                    "on-primary-fixed-variant": "#653e00",
+                    "on-secondary-container": "#5b3800",
+                    "on-tertiary-fixed": "#2a1700",
+                    "surface-tint": "#ffb95f",
+                    "primary-fixed": "#ffddb8",
+                    "on-tertiary-container": "#5b3800",
+                    "inverse-primary": "#ee9800",
+                    "surface-dim": "#0b1326",
+                    "surface": "#0b1326",
+                    "secondary-container": "#ee9800",
+                    "surface-container-lowest": "#060e20",
+                    "surface-container-high": "#222a3d",
+                    "surface-bright": "#31394d",
+                    "tertiary-fixed": "#ffddb8",
+                    "primary": "#ffb95f",
+                    "inverse-surface": "#dae2fd",
+                    "background": "#0b1326",
+                    "error-container": "#93000a",
+                    "on-surface": "#dae2fd",
+                    "on-primary": "#472a00",
+                    "tertiary-container": "#ee9800",
+                    "on-secondary": "#472a00",
+                    "on-secondary-fixed": "#2a1700",
+                    "inverse-on-surface": "#283044",
+                    "on-tertiary-fixed-variant": "#653e00"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "xs": "0.5rem",
+                    "margin": "2rem",
+                    "gutter": "1.5rem",
+                    "md": "1.5rem",
+                    "base": "4px",
+                    "lg": "2rem",
+                    "sm": "1rem",
+                    "xl": "3rem"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "title-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "code": ["monospace"],
+                    "headline-md": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .rim-light {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.1);
+        }
+        .console-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        .console-scrollbar::-webkit-scrollbar-track {
+            background: #000000;
+        }
+        .console-scrollbar::-webkit-scrollbar-thumb {
+            background: #ffb95f;
+            border-radius: 4px;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background font-body-md min-h-screen">
+<!-- NavigationDrawer -->
+<aside class="fixed left-0 top-0 h-full flex flex-col pt-4 bg-slate-950 text-orange-500 font-inter text-sm font-medium h-screen w-64 border-r border-white/5 shadow-2xl shadow-black/50 z-[60]">
+<div class="px-6 mb-8 flex items-center gap-3">
+<div class="w-10 h-10 rounded bg-orange-500/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-orange-400" data-icon="terminal">terminal</span>
+</div>
+<div>
+<p class="text-orange-400 font-black font-title-sm">Server Admin</p>
+<p class="text-slate-400 text-xs">Hytale Node 01</p>
+</div>
+</div>
+<nav class="flex-1 flex flex-col gap-1 px-3">
+<a class="flex items-center gap-3 px-3 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</a>
+<!-- Active Tab: Console -->
+<a class="flex items-center gap-3 px-3 py-3 bg-orange-500/10 text-orange-400 border-r-2 border-orange-500 transition-colors cursor-pointer active:bg-white/10 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="installs">install_mobile</span>
+<span>Console</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span>Files</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span>Players</span>
+</a>
+<a class="flex items-center gap-3 px-3 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 rounded-lg" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+<div class="p-6 border-t border-white/5">
+<div class="flex items-center gap-3">
+<div class="w-8 h-8 rounded-full bg-surface-variant flex items-center justify-center overflow-hidden">
+<img alt="Admin" class="w-full h-full object-cover" data-alt="A professional profile headshot of a server administrator in a dark tech-focused setting. The lighting is dramatic with teal and slate rim highlights reflecting the high-performance gaming environment. The overall aesthetic is minimalist, modern, and authoritative, matching a DevOps professional atmosphere." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB90j7qut7eEZ7nC0owuaJ5U1vRoEm6YIdJnPgFUPVOlePDQs5shzGrRg7uYv_VtwATK-gf9_21_m4mzjyb5qc-XewUQKNBbhc1fH3SfKAnjV83obRftfEu183BB3dnE_doV-8NDw0IoMLMdYSq-pClXQGYsjWkgsaUMV3BQs3Nl4d8YphAcE2qOU-cVS2XG1Uf56ygsBRrnA5k6ezYqEZl9Mb1IlijWOntcwcXdnBpA8a_0KgmD8cEW98Aar8sETTcMyJmeIMJPQ"/>
+</div>
+<div class="flex-1 overflow-hidden">
+<p class="text-on-surface font-semibold truncate">Admin User</p>
+<p class="text-slate-500 text-xs truncate">v1.4.2</p>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-64 min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md text-orange-500 font-inter tracking-tight border-b border-white/10 shadow-[0_-1px_0_rgba(255,255,255,0.1)_inset]">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-orange-500 cursor-pointer transition-all duration-200 active:scale-95" data-icon="terminal">terminal</span>
+<h1 class="text-xl font-bold tracking-tighter text-orange-400">Hytale Command</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-full border border-white/5">
+<div class="w-2 h-2 rounded-full bg-primary animate-pulse"></div>
+<span class="text-label-caps text-primary">SERVER ONLINE</span>
+</div>
+<span class="material-symbols-outlined text-orange-500 cursor-pointer hover:bg-white/5 hover:text-orange-300 p-2 rounded-full transition-all duration-200 active:scale-95" data-icon="account_circle">account_circle</span>
+</div>
+</header>
+<!-- Page Body -->
+<div class="p-margin flex-1 flex flex-col gap-gutter">
+<!-- Header Section -->
+<div class="flex flex-col md:flex-row md:items-end justify-between gap-md">
+<div>
+<div class="flex items-center gap-2 mb-2">
+<span class="text-slate-500 text-body-sm font-medium">Servers</span>
+<span class="material-symbols-outlined text-slate-600 text-sm" data-icon="chevron_right">chevron_right</span>
+<span class="text-orange-400 text-body-sm font-medium">Adventure-Node-West</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Adventure-Node-West</h2>
+<p class="text-slate-400 text-body-sm">ID: hyt-node-01-prod | Location: US-WEST-1</p>
+</div>
+<!-- Server Controls -->
+<div class="flex items-center gap-3">
+<button class="flex items-center gap-2 bg-primary text-on-primary px-6 py-2.5 rounded-lg font-title-sm hover:shadow-[0_0_15px_rgba(255,185,95,0.4)] transition-all active:scale-95 rim-light">
+<span class="material-symbols-outlined" data-icon="play_arrow">play_arrow</span>
+                        Start
+                    </button>
+<button class="flex items-center gap-2 border border-orange-500/50 text-orange-400 px-6 py-2.5 rounded-lg font-title-sm hover:bg-orange-500/10 transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="refresh">refresh</span>
+                        Restart
+                    </button>
+<button class="flex items-center gap-2 border border-error/50 text-error px-6 py-2.5 rounded-lg font-title-sm hover:bg-error/10 transition-all active:scale-95">
+<span class="material-symbols-outlined" data-icon="stop">stop</span>
+                        Stop
+                    </button>
+</div>
+</div>
+<!-- Dashboard Bento Grid -->
+<div class="grid grid-cols-12 gap-gutter flex-1">
+<!-- Metrics Sidebar (Bento Column) -->
+<div class="col-span-12 lg:col-span-3 flex flex-col gap-gutter">
+<!-- Status Card -->
+<div class="bg-surface-container-low rounded-xl p-md border border-white/10 rim-light backdrop-blur-lg">
+<h3 class="text-label-caps text-slate-400 mb-4 flex items-center justify-between">
+                            SYSTEM STATUS
+                            <span class="material-symbols-outlined text-xs" data-icon="info">info</span>
+</h3>
+<div class="space-y-4">
+<div class="flex justify-between items-center">
+<span class="text-slate-400 text-body-sm">CPU Usage</span>
+<span class="text-primary font-code">24.8%</span>
+</div>
+<div class="w-full bg-black/40 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[24.8%]"></div>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-slate-400 text-body-sm">RAM Usage</span>
+<span class="text-primary font-code">6.2 GB / 16 GB</span>
+</div>
+<div class="w-full bg-black/40 h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[38%]"></div>
+</div>
+<div class="flex justify-between items-center">
+<span class="text-slate-400 text-body-sm">Storage</span>
+<span class="text-secondary font-code">82.1 GB / 100 GB</span>
+</div>
+<div class="w-full bg-black/40 h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[82%]"></div>
+</div>
+</div>
+</div>
+<!-- Players Card -->
+<div class="bg-surface-container-low rounded-xl p-md border border-white/10 rim-light backdrop-blur-lg flex-1">
+<h3 class="text-label-caps text-slate-400 mb-4">ACTIVE PLAYERS (42/100)</h3>
+<div class="space-y-3">
+<div class="flex items-center gap-3 p-2 rounded hover:bg-white/5 transition-colors">
+<div class="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">V</div>
+<div>
+<p class="text-body-sm font-medium">Varyn_Slayer</p>
+<p class="text-xs text-slate-500">Ping: 24ms</p>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2 rounded hover:bg-white/5 transition-colors">
+<div class="w-8 h-8 rounded-full bg-secondary/20 flex items-center justify-center text-secondary font-bold text-xs">K</div>
+<div>
+<p class="text-body-sm font-medium">Kweebec_King</p>
+<p class="text-xs text-slate-500">Ping: 48ms</p>
+</div>
+</div>
+<div class="flex items-center gap-3 p-2 rounded hover:bg-white/5 transition-colors">
+<div class="w-8 h-8 rounded-full bg-tertiary/20 flex items-center justify-center text-tertiary font-bold text-xs">O</div>
+<div>
+<p class="text-body-sm font-medium">Outlander99</p>
+<p class="text-xs text-slate-500">Ping: 12ms</p>
+</div>
+</div>
+<button class="w-full mt-4 text-xs text-orange-400 hover:underline">View all 42 players</button>
+</div>
+</div>
+</div>
+<!-- Console Section (Main Bento Area) -->
+<div class="col-span-12 lg:col-span-9 flex flex-col gap-gutter">
+<!-- Console Header Info -->
+<div class="flex items-center justify-between bg-surface-container-high/50 px-6 py-3 rounded-t-xl border-x border-t border-white/10 rim-light">
+<div class="flex items-center gap-4">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-orange-400 text-sm" data-icon="terminal">terminal</span>
+<span class="text-label-caps text-slate-300">SERVER CONSOLE</span>
+</div>
+<div class="h-4 w-px bg-white/10"></div>
+<div class="text-xs text-slate-500 font-code">Connected: wss://node-01.hytale.net:8080</div>
+</div>
+<div class="flex items-center gap-3">
+<button class="text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="content_copy">content_copy</span>
+</button>
+<button class="text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="delete">delete</span>
+</button>
+<button class="text-slate-400 hover:text-white transition-colors">
+<span class="material-symbols-outlined text-sm" data-icon="settings">settings</span>
+</button>
+</div>
+</div>
+<!-- Main Terminal Window -->
+<div class="bg-black flex-1 border-x border-white/10 shadow-inner flex flex-col min-h-[500px]">
+<div class="flex-1 overflow-y-auto p-6 font-code text-code console-scrollbar space-y-1">
+<p class="text-slate-500">[14:22:01] [System] Initializing Hytale Server Engine v1.4.2...</p>
+<p class="text-slate-500">[14:22:03] [System] Loading world 'Adventure-Main' from disk...</p>
+<p class="text-orange-400">[14:22:05] [Network] Server listening on port 25565</p>
+<p class="text-white">[14:22:10] [Server] Successfully loaded 42,104 entities.</p>
+<p class="text-primary">[14:22:12] [Console] Command 'whitelist add Varyn_Slayer' executed by Admin.</p>
+<p class="text-secondary">[14:23:45] [Warning] High entity density detected at coords [120, 64, -2401].</p>
+<p class="text-white">[14:24:10] [Chat] Varyn_Slayer: Heading to the Orbis portals now.</p>
+<p class="text-white">[14:24:15] [Chat] Kweebec_King: Wait for me at the spawn point!</p>
+<p class="text-slate-500">[14:25:00] [System] Automatic backup initiated.</p>
+<p class="text-orange-400">[14:25:05] [System] Backup 'daily-1425' completed successfully (4.2GB).</p>
+<p class="text-error">[14:26:12] [Error] Failed to resolve skin data for player 'GhostUser'.</p>
+<p class="text-white">[14:26:45] [Chat] Outlander99: Does anyone have extra cobalt ingots?</p>
+<p class="text-slate-500">[14:27:01] [System] Performing GC cleanup... freed 452MB RAM.</p>
+<div class="flex gap-2">
+<span class="text-primary font-bold">&gt;</span>
+<span class="animate-pulse w-2 h-5 bg-primary/50 block"></span>
+</div>
+</div>
+</div>
+<!-- Command Input -->
+<div class="bg-surface-container-high px-6 py-4 rounded-b-xl border-x border-b border-white/10 rim-light">
+<div class="relative">
+<div class="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-orange-500 text-sm" data-icon="chevron_right">chevron_right</span>
+</div>
+<input class="w-full bg-slate-900 border border-white/10 rounded-lg pl-10 pr-24 py-3 text-body-sm font-code text-on-surface focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary transition-all" placeholder="Type a command (e.g. /stop, /weather clear)..." type="text"/>
+<div class="absolute inset-y-0 right-2 flex items-center">
+<button class="bg-orange-500/10 text-orange-400 px-4 py-1.5 rounded-md text-xs font-bold border border-orange-500/20 hover:bg-orange-500/20 transition-all active:scale-95">
+                                    EXECUTE
+                                </button>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Footer Details -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter mt-2">
+<div class="bg-surface-container-low border border-white/5 p-4 rounded-lg flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-blue-500/10 flex items-center justify-center text-blue-400">
+<span class="material-symbols-outlined" data-icon="memory">memory</span>
+</div>
+<div>
+<p class="text-xs text-slate-500">Processor</p>
+<p class="text-body-sm font-semibold">AMD Ryzen 9 5950X</p>
+</div>
+</div>
+<div class="bg-surface-container-low border border-white/5 p-4 rounded-lg flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-amber-500/10 flex items-center justify-center text-amber-400">
+<span class="material-symbols-outlined" data-icon="language">language</span>
+</div>
+<div>
+<p class="text-xs text-slate-500">Region</p>
+<p class="text-body-sm font-semibold">San Jose (US-West-1)</p>
+</div>
+</div>
+<div class="bg-surface-container-low border border-white/5 p-4 rounded-lg flex items-center gap-4">
+<div class="w-10 h-10 rounded bg-purple-500/10 flex items-center justify-center text-purple-400">
+<span class="material-symbols-outlined" data-icon="security">security</span>
+</div>
+<div>
+<p class="text-xs text-slate-500">Firewall</p>
+<p class="text-body-sm font-semibold">Hytale Shield Active</p>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>

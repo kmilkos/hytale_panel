@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary": "#ffb95f",
+                    "inverse-surface": "#dae2fd",
+                    "inverse-primary": "#ee9800",
+                    "surface-container": "#171f33",
+                    "primary-fixed": "#ffddb8",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-dim": "#0b1326",
+                    "on-primary-fixed-variant": "#653e00",
+                    "primary-fixed-dim": "#ffb95f",
+                    "outline": "#859490",
+                    "secondary-fixed-dim": "#ffb95f",
+                    "on-primary": "#472a00",
+                    "error-container": "#93000a",
+                    "error": "#ffb4ab",
+                    "on-secondary-container": "#5b3800",
+                    "surface-bright": "#31394d",
+                    "on-surface-variant": "#bbcac6",
+                    "on-primary-container": "#5b3800",
+                    "on-secondary-fixed": "#2a1700",
+                    "secondary-container": "#ee9800",
+                    "inverse-on-surface": "#283044",
+                    "on-tertiary": "#472a00",
+                    "surface-container-lowest": "#060e20",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "on-tertiary-fixed": "#2a1700",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-container": "#ee9800",
+                    "on-tertiary-container": "#5b3800",
+                    "tertiary": "#ffb95f",
+                    "on-background": "#dae2fd",
+                    "surface-variant": "#2d3449",
+                    "surface": "#0b1326",
+                    "on-error": "#690005",
+                    "surface-tint": "#ffb95f",
+                    "primary-container": "#ee9800",
+                    "surface-container-high": "#222a3d",
+                    "primary": "#ffb95f",
+                    "on-secondary-fixed-variant": "#653e00",
+                    "surface-container-highest": "#2d3449",
+                    "outline-variant": "#3c4947",
+                    "secondary-fixed": "#ffddb8",
+                    "background": "#0b1326",
+                    "on-surface": "#dae2fd",
+                    "on-secondary": "#472a00",
+                    "surface-container-low": "#131b2e",
+                    "on-primary-fixed": "#2a1700"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "xs": "0.5rem",
+                    "margin": "2rem",
+                    "gutter": "1.5rem",
+                    "md": "1.5rem",
+                    "base": "4px",
+                    "lg": "2rem",
+                    "sm": "1rem",
+                    "xl": "3rem"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "title-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "code": ["monospace"],
+                    "headline-md": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .glass-card {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .rim-light {
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        .pulse-amber {
+            box-shadow: 0 0 0 0 rgba(255, 185, 95, 0.7);
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 185, 95, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(255, 185, 95, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(255, 185, 95, 0); }
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface font-body-md overflow-x-hidden">
+<!-- NavigationDrawer Shell -->
+<aside class="fixed left-0 top-0 h-full flex flex-col pt-4 w-64 bg-slate-950 border-r border-white/5 shadow-2xl shadow-black/50 z-[60] hidden md:flex">
+<div class="px-6 mb-8 flex items-center gap-3">
+<span class="material-symbols-outlined text-primary font-black">terminal</span>
+<span class="text-primary font-black text-title-sm">Hytale Command</span>
+</div>
+<div class="px-4 mb-8">
+<div class="flex items-center gap-3 p-3 rounded-xl bg-white/5">
+<div class="w-10 h-10 rounded-full bg-surface-container-highest flex items-center justify-center border border-white/10 overflow-hidden">
+<img alt="Admin Avatar" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCHc0IYxsI59jdKFcjrnsWxPg7oZ9ZxbZFtqeH-rJA4moT6imWrJYGXREwZQspzf6Qq8sWV-xRDgDHIan_05mqo9o1iNcByOhrL0FYH5wtOsVaThY5W-QFDhtOWjja71SujnsjK-B5UgLYSWy5KCdlZ6A1cO1a8nd4ualW2XUQvV1Au0ARQU3KjJoBnewobENG_nAu34AW_gq2WUbu2CDIsFztYywcurfSvStfShuLzjl_-7hczPUB_67WSU7gIEQNHbzKIORzw0w"/>
+</div>
+<div>
+<p class="text-sm font-bold text-on-surface">Server Admin</p>
+<p class="text-xs text-slate-400">Hytale Node 01</p>
+</div>
+<div class="ml-auto">
+<span class="text-[10px] font-code bg-primary/20 text-primary px-1.5 py-0.5 rounded">v1.4.2</span>
+</div>
+</div>
+</div>
+<nav class="flex-1 px-2 space-y-1">
+<a class="flex items-center gap-3 px-4 py-3 bg-primary/10 text-primary border-r-2 border-primary font-inter text-sm font-medium cursor-pointer" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors font-inter text-sm font-medium cursor-pointer" href="#">
+<span class="material-symbols-outlined">install_mobile</span>
+<span>Console</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors font-inter text-sm font-medium cursor-pointer" href="#">
+<span class="material-symbols-outlined">folder_open</span>
+<span>Files</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors font-inter text-sm font-medium cursor-pointer" href="#">
+<span class="material-symbols-outlined">group</span>
+<span>Players</span>
+</a>
+<a class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors font-inter text-sm font-medium cursor-pointer" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span>Settings</span>
+</a>
+</nav>
+</aside>
+<div class="md:pl-64 flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/10 shadow-[0_-1px_0_rgba(255,255,255,0.1)_inset]">
+<div class="flex items-center gap-4">
+<button class="md:hidden text-slate-400 active:scale-95 transition-all">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h1 class="text-xl font-bold tracking-tighter text-primary font-inter">Hytale Command</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="hidden sm:flex items-center bg-white/5 rounded-full px-3 py-1 gap-2 border border-white/5">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-xs font-medium text-slate-300">Master Node Online</span>
+</div>
+<button class="text-primary hover:bg-white/5 hover:text-primary-fixed p-2 rounded-full transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-1 p-margin">
+<div class="max-w-7xl mx-auto">
+<!-- Page Header Section -->
+<section class="mb-lg flex flex-col md:flex-row md:items-end justify-between gap-md">
+<div>
+<div class="flex items-center gap-2 mb-xs">
+<span class="material-symbols-outlined text-primary" style="font-size: 20px;">dns</span>
+<span class="text-label-caps font-label-caps text-primary">INFRASTRUCTURE MANAGER</span>
+</div>
+<h2 class="text-display-lg font-display-lg text-on-surface">Servers List</h2>
+<p class="text-body-md font-body-md text-slate-400 mt-2 max-w-xl">
+                            Deploy, scale, and monitor your Hytale world instances with high-precision control and real-time telemetry.
+                        </p>
+</div>
+<div class="flex gap-sm">
+<button class="px-md py-xs rounded bg-white/5 border border-white/10 text-on-surface font-title-sm hover:bg-white/10 transition-all flex items-center gap-2">
+<span class="material-symbols-outlined">refresh</span>
+                            Refresh
+                        </button>
+<button class="px-md py-xs rounded bg-primary text-on-primary font-title-sm hover:shadow-[0_0_15px_rgba(255,185,95,0.4)] transition-all flex items-center gap-2">
+<span class="material-symbols-outlined">add</span>
+                            New Server
+                        </button>
+</div>
+</section>
+<!-- Servers Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter">
+<!-- Server Card 1: Survival -->
+<div class="glass-card rim-light rounded-xl overflow-hidden flex flex-col group hover:border-primary/30 transition-all duration-300">
+<div class="relative h-32 overflow-hidden">
+<img class="w-full h-full object-cover grayscale-[0.5] group-hover:grayscale-0 transition-all duration-500 group-hover:scale-105" data-alt="A cinematic low-angle view of a dense Hytale-style voxel forest at dawn. Soft volumetric sunlight filters through blocky orange and yellow leaves, casting long shadows across a winding dirt path. The atmosphere is mystical and serene, reflecting a high-end survival gaming environment with rich textures and professional lighting." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD0ULQnoOUOyHdIe9TS9FTtEtg-lZ7ONdsLzJY6l_-J6PCXzWzVdbXX6p8nbHYXF_4L_sYhUug5xliSGkQnhOG9VqUNzETZy-0PwGUnzxNAJPjvnDMDK8XmR1B77uzs5rTPX4TMG79fqaQOAnFCtx-nnGUhP0bS90HicurySHlCDZLv9Q_VDqcoRnLZVqgJp1Cd58eEuQrLuKLbmG3-xqtlT39KHWB8T9rVbmiyNyhvSBGJvT-6CirkqpmyfK8KL8jxlAB9FUmTpw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent"></div>
+<div class="absolute top-3 right-3">
+<span class="bg-primary/20 backdrop-blur-md text-primary text-xs px-2.5 py-1 rounded-full border border-primary/30 flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-primary pulse-amber"></span>
+                                    Running
+                                </span>
+</div>
+</div>
+<div class="p-md flex-1 flex flex-col">
+<div class="flex justify-between items-start mb-xs">
+<div>
+<h3 class="text-title-sm font-title-sm text-on-surface">Survival Server</h3>
+<p class="text-body-sm font-body-sm text-slate-400">Main Instance</p>
+</div>
+<span class="material-symbols-outlined text-slate-500">more_vert</span>
+</div>
+<div class="mt-md space-y-sm">
+<div class="flex items-center justify-between text-xs">
+<span class="text-slate-500">IP:PORT</span>
+<span class="font-code text-on-surface">192.168.1.10:25565</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<span class="text-slate-500">PLAYERS</span>
+<span class="text-on-surface">42 / 100</span>
+</div>
+<div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[42%]"></div>
+</div>
+</div>
+<div class="mt-lg flex items-center gap-2">
+<button class="flex-1 bg-white/5 hover:bg-error-container text-on-surface hover:text-on-error-container py-2 rounded text-sm font-medium transition-colors border border-white/5 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">stop</span>
+                                    Stop
+                                </button>
+<button class="flex-1 bg-primary/10 hover:bg-primary text-primary hover:text-on-primary py-2 rounded text-sm font-medium transition-all border border-primary/20 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">terminal</span>
+                                    Console
+                                </button>
+</div>
+</div>
+</div>
+<!-- Server Card 2: Creative -->
+<div class="glass-card rim-light rounded-xl overflow-hidden flex flex-col group hover:border-primary/30 transition-all duration-300">
+<div class="relative h-32 overflow-hidden">
+<img class="w-full h-full object-cover grayscale-[0.5] group-hover:grayscale-0 transition-all duration-500 group-hover:scale-105" data-alt="A sprawling geometric architectural structure built from digital voxel blocks under a bright midday sky. The scene is sharp and well-defined, with white and cyan blocks creating a futuristic creative hub. The lighting is high-key and clean, suggesting a blank canvas for building and creation in a high-performance sandbox engine." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDVJY308jFSO5134vyJwiWbKzeck3THUbg51dNKNFUZJVSdcmEAPptjbFdGt6PtgCSb8KjfiVTIMaOmigPg94b_VaLhLD7ClM3ZSesjCazufRAJh6C3EeSGL_THRNmhqr-BVtynEMK2wevOJhcE4iXHskGvNPaJeUHthIiRhpKB2FGHBi1c_6Bo0Oah2J75cLQ9vlY5AX0_abG0khZ-NyVG2PzF5KkO2L9dDeFQ2tHkzdtJ-xRvT3sZbgA2kWFL6gh5tUJrDti-fg"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent"></div>
+<div class="absolute top-3 right-3">
+<span class="bg-slate-800/80 backdrop-blur-md text-slate-400 text-xs px-2.5 py-1 rounded-full border border-white/10 flex items-center gap-1.5">
+<span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+                                    Stopped
+                                </span>
+</div>
+</div>
+<div class="p-md flex-1 flex flex-col">
+<div class="flex justify-between items-start mb-xs">
+<div>
+<h3 class="text-title-sm font-title-sm text-on-surface">Creative Mode</h3>
+<p class="text-body-sm font-body-sm text-slate-400">Dev Staging</p>
+</div>
+<span class="material-symbols-outlined text-slate-500">more_vert</span>
+</div>
+<div class="mt-md space-y-sm">
+<div class="flex items-center justify-between text-xs">
+<span class="text-slate-500">IP:PORT</span>
+<span class="font-code text-on-surface">192.168.1.10:25566</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<span class="text-slate-500">PLAYERS</span>
+<span class="text-on-surface">0 / 20</span>
+</div>
+<div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+<div class="bg-slate-700 h-full w-[0%]"></div>
+</div>
+</div>
+<div class="mt-lg flex items-center gap-2">
+<button class="flex-1 bg-primary text-on-primary hover:shadow-[0_0_15px_rgba(255,185,95,0.4)] py-2 rounded text-sm font-medium transition-all flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">play_arrow</span>
+                                    Start
+                                </button>
+<button class="flex-1 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-on-surface py-2 rounded text-sm font-medium transition-all border border-white/5 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">settings</span>
+                                    Config
+                                </button>
+</div>
+</div>
+</div>
+<!-- Server Card 3: Minigames -->
+<div class="glass-card rim-light rounded-xl overflow-hidden flex flex-col group hover:border-primary/30 transition-all duration-300">
+<div class="relative h-32 overflow-hidden">
+<img class="w-full h-full object-cover grayscale-[0.5] group-hover:grayscale-0 transition-all duration-500 group-hover:scale-105" data-alt="A vibrant, fast-paced arena scene in a voxel-based world, featuring bright neon blue and purple lights streaking across a dark competitive map. The setting is energetic and intense, capturing the spirit of a minigames hub. Glowing particles and sharp geometric architecture dominate the composition, styled with a high-end gaming aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBGAqTtGacWskX54BMoj4-dnnPeGZhOiUHnnnpLUU81G6vEIk-TV8fEh9uzQ1AcEHuWaMvV_bOUJYUKHBFMEvK__-WTxZOTsiYO0VBDC7PCWMReFs0CJ1io6qig_ThbUXPQwL3AqwJVxccIejj3jXcJPEOuk0HMkDLxXtHItTG0C77AzNoVLGsoYy1SACY2W1g998mXbMuDOIOpiJdys-2gYFLcBGJFAsgwjAFxpxn1o6UwngcPL7eLk9EIe3G2oOTph8VW3Zw-iQ"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-950 to-transparent"></div>
+<div class="absolute top-3 right-3">
+<span class="bg-secondary/20 backdrop-blur-md text-secondary text-xs px-2.5 py-1 rounded-full border border-secondary/30 flex items-center gap-1.5">
+<span class="material-symbols-outlined animate-spin" style="font-size: 14px;">sync</span>
+                                    Updating
+                                </span>
+</div>
+</div>
+<div class="p-md flex-1 flex flex-col">
+<div class="flex justify-between items-start mb-xs">
+<div>
+<h3 class="text-title-sm font-title-sm text-on-surface">Minigames Hub</h3>
+<p class="text-body-sm font-body-sm text-slate-400">Global Cluster</p>
+</div>
+<span class="material-symbols-outlined text-slate-500">more_vert</span>
+</div>
+<div class="mt-md space-y-sm">
+<div class="flex items-center justify-between text-xs">
+<span class="text-slate-500">IP:PORT</span>
+<span class="font-code text-on-surface">192.168.1.10:25567</span>
+</div>
+<div class="flex items-center justify-between text-xs">
+<span class="text-slate-500">UPDATE PROGRESS</span>
+<span class="text-secondary">68%</span>
+</div>
+<div class="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+<div class="bg-secondary h-full w-[68%]"></div>
+</div>
+</div>
+<div class="mt-lg flex items-center gap-2">
+<button class="flex-1 bg-white/5 text-slate-500 py-2 rounded text-sm font-medium cursor-not-allowed border border-white/5 flex items-center justify-center gap-2" disabled="">
+<span class="material-symbols-outlined text-sm">stop</span>
+                                    Abort
+                                </button>
+<button class="flex-1 bg-white/5 hover:bg-white/10 text-on-surface py-2 rounded text-sm font-medium transition-all border border-white/5 flex items-center justify-center gap-2">
+<span class="material-symbols-outlined text-sm">list_alt</span>
+                                    Logs
+                                </button>
+</div>
+</div>
+</div>
+</div>
+<!-- Stats Dashboard Preview -->
+<section class="mt-xl">
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-gutter">
+<div class="lg:col-span-3 glass-card rounded-xl p-md rim-light">
+<div class="flex justify-between items-center mb-md">
+<h3 class="text-title-sm font-title-sm">Cluster Resource Usage</h3>
+<div class="flex gap-4">
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="text-xs text-slate-400">CPU</span>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="text-xs text-slate-400">RAM</span>
+</div>
+</div>
+</div>
+<!-- Mock Graph -->
+<div class="h-48 w-full flex items-end gap-2 px-2">
+<div class="flex-1 bg-primary/20 rounded-t h-[40%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[60%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[30%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[80%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[45%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[55%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[90%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[35%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[65%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[50%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[75%]"></div>
+<div class="flex-1 bg-primary/20 rounded-t h-[40%]"></div>
+</div>
+<div class="mt-4 flex justify-between text-[10px] text-slate-500 font-code">
+<span>12:00</span>
+<span>13:00</span>
+<span>14:00</span>
+<span>15:00</span>
+<span>16:00</span>
+<span>17:00</span>
+<span>18:00</span>
+</div>
+</div>
+<div class="glass-card rounded-xl p-md rim-light flex flex-col justify-between">
+<div>
+<p class="text-label-caps text-slate-500 mb-xs">NODE HEALTH</p>
+<div class="flex items-center gap-4 py-2">
+<span class="material-symbols-outlined text-primary" style="font-size: 32px;">speed</span>
+<div>
+<p class="text-headline-md font-headline-md">99.8%</p>
+<p class="text-xs text-slate-400">Global Uptime</p>
+</div>
+</div>
+</div>
+<div class="pt-md border-t border-white/5 space-y-3">
+<div class="flex justify-between text-xs">
+<span class="text-slate-500">Active Threads</span>
+<span class="text-on-surface">1,204</span>
+</div>
+<div class="flex justify-between text-xs">
+<span class="text-slate-500">Mem Load</span>
+<span class="text-secondary">74.2 GB</span>
+</div>
+<div class="flex justify-between text-xs">
+<span class="text-slate-500">I/O Speed</span>
+<span class="text-primary">1.4 GB/s</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+</div>
+<!-- Floating Action Button -->
+<button class="fixed bottom-8 right-8 w-14 h-14 rounded-full bg-primary text-on-primary shadow-2xl shadow-primary/40 hover:scale-110 active:scale-95 transition-all z-[100] flex items-center justify-center">
+<span class="material-symbols-outlined" style="font-size: 30px;">add</span>
+</button>
+</body></html>

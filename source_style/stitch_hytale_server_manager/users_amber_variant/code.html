@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            line-height: 1;
+            text-transform: none;
+            letter-spacing: normal;
+            word-wrap: normal;
+            white-space: nowrap;
+            direction: ltr;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b1326;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .status-pulse {
+            position: relative;
+        }
+        .status-pulse::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: currentColor;
+            left: -12px;
+            top: 50%;
+            transform: translateY(-50%);
+            box-shadow: 0 0 8px currentColor;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+          darkMode: "class",
+          theme: {
+            extend: {
+              "colors": {
+                      "secondary": "#ffb95f",
+                      "inverse-surface": "#dae2fd",
+                      "inverse-primary": "#ee9800",
+                      "surface-container": "#171f33",
+                      "primary-fixed": "#ffddb8",
+                      "tertiary-fixed": "#ffddb8",
+                      "surface-dim": "#0b1326",
+                      "on-primary-fixed-variant": "#653e00",
+                      "primary-fixed-dim": "#ffb95f",
+                      "outline": "#859490",
+                      "secondary-fixed-dim": "#ffb95f",
+                      "on-primary": "#472a00",
+                      "error-container": "#93000a",
+                      "error": "#ffb4ab",
+                      "on-secondary-container": "#5b3800",
+                      "surface-bright": "#31394d",
+                      "on-surface-variant": "#bbcac6",
+                      "on-primary-container": "#5b3800",
+                      "on-secondary-fixed": "#2a1700",
+                      "secondary-container": "#ee9800",
+                      "inverse-on-surface": "#283044",
+                      "on-tertiary": "#472a00",
+                      "surface-container-lowest": "#060e20",
+                      "on-tertiary-fixed-variant": "#653e00",
+                      "on-tertiary-fixed": "#2a1700",
+                      "tertiary-fixed-dim": "#ffb95f",
+                      "on-error-container": "#ffdad6",
+                      "tertiary-container": "#ee9800",
+                      "on-tertiary-container": "#5b3800",
+                      "tertiary": "#ffb95f",
+                      "on-background": "#dae2fd",
+                      "surface-variant": "#2d3449",
+                      "surface": "#0b1326",
+                      "on-error": "#690005",
+                      "surface-tint": "#ffb95f",
+                      "primary-container": "#ee9800",
+                      "surface-container-high": "#222a3d",
+                      "primary": "#ffb95f",
+                      "on-secondary-fixed-variant": "#653e00",
+                      "surface-container-highest": "#2d3449",
+                      "outline-variant": "#3c4947",
+                      "secondary-fixed": "#ffddb8",
+                      "background": "#0b1326",
+                      "on-surface": "#dae2fd",
+                      "on-secondary": "#472a00",
+                      "surface-container-low": "#131b2e",
+                      "on-primary-fixed": "#2a1700"
+              },
+              "borderRadius": {
+                      "DEFAULT": "0.125rem",
+                      "lg": "0.25rem",
+                      "xl": "0.5rem",
+                      "full": "0.75rem"
+              },
+              "spacing": {
+                      "xs": "0.5rem",
+                      "margin": "2rem",
+                      "gutter": "1.5rem",
+                      "md": "1.5rem",
+                      "base": "4px",
+                      "lg": "2rem",
+                      "sm": "1rem",
+                      "xl": "3rem"
+              },
+              "fontFamily": {
+                      "body-md": ["Inter"],
+                      "title-sm": ["Inter"],
+                      "body-sm": ["Inter"],
+                      "display-lg": ["Inter"],
+                      "label-caps": ["Inter"],
+                      "code": ["monospace"],
+                      "headline-md": ["Inter"]
+              },
+              "fontSize": {
+                      "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                      "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                      "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                      "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                      "code": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                      "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+              }
+            },
+          },
+        }
+      </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- Navigation Drawer -->
+<aside class="fixed left-0 top-0 h-full flex flex-col pt-4 bg-slate-950 h-screen w-64 border-r border-white/5 shadow-2xl shadow-black/50 z-[60]">
+<div class="px-6 mb-8 flex items-center gap-3">
+<span class="material-symbols-outlined text-orange-400" data-icon="terminal">terminal</span>
+<span class="text-orange-400 font-black font-inter text-sm font-medium">HYTALE COMMAND</span>
+</div>
+<div class="px-4 mb-8">
+<div class="flex items-center gap-3 p-3 glass-card rounded-lg">
+<img alt="Admin Avatar" class="w-10 h-10 rounded-full border border-orange-500/30" data-alt="A professional digital portrait of a server administrator avatar for a high-tech gaming command center. The character has a sharp, modern appearance with teal holographic accents on their clothing. The background is a dark, sleek data center with glowing teal and slate blue light. The lighting is dramatic, high-contrast, emphasizing the technological expert persona." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXnrn8mDHWO_GlwKr_BTBZAxTvmS_sotn_il4fPlQLejXlUf0vqk6QB1J00W6SqK7vKcXjE3WG3xjrTLrZDKr6twkq7p4yUwQNJroq679X6klEDnGa5sfvKesU-5lVGg1Xt5wD9hKPsK7UF8eKHwe60YHbvUepJYCb_0g_C361QbVtnRNlD9HUmquNftn0zMr6WbYY5JAdu7iwtXbxWZ6Gmu7ZSW-OfTApUvoFxCqC42NG3Af9V_0BI2brswVcWPSXhselF-Pa4A"/>
+<div>
+<div class="text-on-surface font-bold text-sm font-inter">Server Admin</div>
+<div class="text-slate-400 text-xs font-inter">Hytale Node 01</div>
+</div>
+</div>
+</div>
+<nav class="flex-1 space-y-1 px-2">
+<div class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span>Dashboard</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium">
+<span class="material-symbols-outlined" data-icon="installs">install_mobile</span>
+<span>Console</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium">
+<span class="material-symbols-outlined" data-icon="folder_open">folder_open</span>
+<span>Files</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span>Players</span>
+</div>
+<div class="flex items-center gap-3 px-4 py-3 bg-orange-500/10 text-orange-400 border-r-2 border-orange-500 cursor-pointer active:bg-white/10 font-inter text-sm font-medium">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span>Settings</span>
+</div>
+</nav>
+<div class="p-4 mt-auto border-t border-white/5">
+<div class="text-slate-500 text-[10px] font-inter uppercase tracking-widest px-2 mb-2">System Status</div>
+<div class="flex items-center gap-2 px-2">
+<div class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
+<span class="text-orange-500/80 text-xs font-medium">NODE_STABLE</span>
+</div>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<div class="pl-64 flex flex-col min-h-screen">
+<!-- Top App Bar -->
+<header class="flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/10 shadow-[0_-1px_0_rgba(255,255,255,0.1)_inset]">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-orange-500" data-icon="terminal">terminal</span>
+<h1 class="text-xl font-bold tracking-tighter text-orange-400 font-inter tracking-tight">Hytale Command</h1>
+</div>
+<div class="flex items-center gap-4">
+<div class="relative group">
+<button class="p-2 text-slate-400 hover:bg-white/5 hover:text-orange-300 rounded-lg transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<span class="absolute top-2 right-2 w-2 h-2 bg-secondary rounded-full border border-slate-950"></span>
+</div>
+<button class="p-2 text-slate-400 hover:bg-white/5 hover:text-orange-300 rounded-lg transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined" data-icon="account_circle">account_circle</span>
+</button>
+</div>
+</header>
+<!-- Page Canvas -->
+<main class="flex-1 p-margin">
+<div class="max-w-7xl mx-auto">
+<!-- Page Header Area -->
+<div class="flex justify-between items-end mb-lg">
+<div>
+<h2 class="font-display-lg text-display-lg text-on-surface mb-2">User Management</h2>
+<p class="font-body-md text-body-md text-slate-400">Manage administrative access and roles for the Hytale server network.</p>
+</div>
+<button class="flex items-center gap-2 px-6 py-3 bg-primary text-on-primary rounded-lg font-bold transition-all hover:shadow-[0_0_20px_rgba(255,185,95,0.4)] active:scale-95">
+<span class="material-symbols-outlined" data-icon="person_add">person_add</span>
+<span>Add User</span>
+</button>
+</div>
+<!-- Stats Bento Grid -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-gutter mb-lg">
+<div class="glass-card p-6 rounded-xl">
+<div class="text-slate-500 font-label-caps text-label-caps mb-4">TOTAL USERS</div>
+<div class="text-3xl font-black text-on-surface">12</div>
+<div class="mt-2 text-orange-500 text-xs font-medium flex items-center gap-1">
+<span class="material-symbols-outlined text-[14px]" data-icon="trending_up">trending_up</span>
+<span>+2 this month</span>
+</div>
+</div>
+<div class="glass-card p-6 rounded-xl">
+<div class="text-slate-500 font-label-caps text-label-caps mb-4">ADMINS</div>
+<div class="text-3xl font-black text-primary">4</div>
+<div class="mt-2 text-slate-400 text-xs">High Privilege</div>
+</div>
+<div class="glass-card p-6 rounded-xl">
+<div class="text-slate-500 font-label-caps text-label-caps mb-4">MODERATORS</div>
+<div class="text-3xl font-black text-secondary">8</div>
+<div class="mt-2 text-slate-400 text-xs">Scoped Access</div>
+</div>
+<div class="glass-card p-6 rounded-xl">
+<div class="text-slate-500 font-label-caps text-label-caps mb-4">ACTIVE SESSIONS</div>
+<div class="text-3xl font-black text-on-surface">3</div>
+<div class="mt-2 text-orange-500 text-xs flex items-center gap-1">
+<div class="w-1.5 h-1.5 rounded-full bg-orange-500"></div>
+<span>Real-time</span>
+</div>
+</div>
+</div>
+<!-- Main Data Table -->
+<div class="glass-card rounded-xl overflow-hidden">
+<div class="p-6 border-b border-white/5 flex justify-between items-center bg-white/5">
+<h3 class="font-title-sm text-title-sm text-on-surface">System Administrators</h3>
+<div class="flex gap-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-[18px]" data-icon="search">search</span>
+<input class="bg-surface-dim border border-white/10 rounded-lg pl-10 pr-4 py-2 text-sm text-on-surface focus:outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500 transition-all w-64" placeholder="Search administrators..." type="text"/>
+</div>
+<button class="flex items-center gap-2 px-4 py-2 border border-white/10 rounded-lg text-sm text-slate-400 hover:bg-white/5 transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="filter_list">filter_list</span>
+<span>Filters</span>
+</button>
+</div>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left">
+<thead>
+<tr class="text-slate-500 font-label-caps text-label-caps border-b border-white/5">
+<th class="px-6 py-4 font-bold">User Identity</th>
+<th class="px-6 py-4 font-bold">Role</th>
+<th class="px-6 py-4 font-bold">Status</th>
+<th class="px-6 py-4 font-bold">Last Activity</th>
+<th class="px-6 py-4 font-bold text-right">Actions</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-white/5">
+<!-- Row 1 -->
+<tr class="hover:bg-white/[0.02] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg overflow-hidden border border-white/10">
+<img class="w-full h-full object-cover" data-alt="A minimalist, futuristic digital avatar for a system user. The character has sleek, stylized features with a palette of deep navy and bright neon teal accents. The setting is a clean, abstract tech environment with soft bokeh effects and geometric lines in the background. The mood is professional, high-end, and integrated into a premium gaming command center UI." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDYVYXGV8xuqS2vFlRRv8qZ4ZpHEHxDuRtCUGAnf3-RE8Bu3h6yggrLPVC9FvzkPqw6QRTfMM93qqzmHqQlvIJTP94AcMmdGB-kWedPVeySeSIHkXAv4tnmB9j9spmA-0jVOvjV55zCm-Cz9t3Q_52HPMMk8bo27G2Z3yRoiUFv5zqP44ydTVsgzkTR-WXOd9xSzmvCSZXewg_PXh9aRFYMAxctH3TABEIPkpdPvYit7ApVXeO4ELJ53Tk2aw4UsdGrsV9eaitxCg"/>
+</div>
+<div>
+<div class="text-on-surface font-semibold text-body-sm font-body-sm">Alex Rivera</div>
+<div class="text-slate-500 text-[12px] font-code">arivera@hytale.sys</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-orange-500/10 text-orange-400 text-[11px] font-black uppercase rounded-full border border-orange-500/20">Admin</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 pl-3">
+<span class="text-orange-500 text-xs font-medium status-pulse">Online</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-400 text-xs font-inter">2 mins ago</td>
+<td class="px-6 py-4 text-right">
+<div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-2 text-slate-400 hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="edit">edit</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-error hover:bg-error-container/20 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="delete">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-white/[0.02] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg overflow-hidden border border-white/10">
+<img class="w-full h-full object-cover" data-alt="A sophisticated digital avatar of a female moderator. The design uses soft-edged futuristic gear with a deep slate and amber color scheme. The lighting is low-key with warm orange rim lights, suggesting a professional yet accessible persona. The background features subtle digital data stream motifs consistent with a high-performance Hytale server interface." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCDax8UATea1jbEPACdcTPccQpSrpcjJKGpZxv41m6xsD5QUJ12Kw2erYME_gTzAADdO5I_qu3QgI0wdNi0EItOwkCmJUrmtAIN18uzhEbJYhZCzYveU2qSiKX22LRtg0R3wviesgkjwCIaOIDgRSLjo2tHUnKw1CXxmrLlyYtdd_uAoAcXsMLDP0cL2SeFuxP3HtJ-DDi4S003FiBvhGyuMIWb_2SleTNZbRMEoBlULbljxvxeT7u-_QXObQdHYVU828VO-drQFA"/>
+</div>
+<div>
+<div class="text-on-surface font-semibold text-body-sm font-body-sm">Elena Vance</div>
+<div class="text-slate-500 text-[12px] font-code">evance@hytale.sys</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-secondary/10 text-secondary text-[11px] font-black uppercase rounded-full border border-secondary/20">Moderator</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 pl-3">
+<span class="text-slate-400 text-xs font-medium">Away</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-400 text-xs font-inter">1 hour ago</td>
+<td class="px-6 py-4 text-right">
+<div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-2 text-slate-400 hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="edit">edit</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-error hover:bg-error-container/20 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="delete">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-white/[0.02] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg overflow-hidden border border-white/10">
+<img class="w-full h-full object-cover" data-alt="A modern digital avatar representing a technical moderator. The character has a sharp, focused look with slate blue apparel and vibrant cyan energy highlights. The background is a minimalist grid pattern with subtle depth, creating a sense of a high-tech virtual cockpit. The aesthetic is clean and professional, matching the teal-accented dark mode dashboard design." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAbBbSVlZaJuhwWEBNpuxvRRM6DcqaA_HOQWR6tEpVlH8GF4YtbAZAPgoSTOIZGLSVAEmbUJnmbLnuPegPSe3X5tOOFPtAoFswalY4He-erM1fRvGL3KdE26X0LRcjK29itkzXi93RLi6Hey2mlIAkTg-CafpFVqew7_NtoxrOhPmTLwoTyxzNz8Q3jWiSU26RZCfUxGGCeA3LbSQxEQjaoqQVZMs6gXrg1bpwD-iRGuROPa4tFEjBnhEhlD58ZutMEmCtDpbk7yg"/>
+</div>
+<div>
+<div class="text-on-surface font-semibold text-body-sm font-body-sm">Marcus K.</div>
+<div class="text-slate-500 text-[12px] font-code">mkline@hytale.sys</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-secondary/10 text-secondary text-[11px] font-black uppercase rounded-full border border-secondary/20">Moderator</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 pl-3">
+<span class="text-error text-xs font-medium">Offline</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-400 text-xs font-inter">2 days ago</td>
+<td class="px-6 py-4 text-right">
+<div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-2 text-slate-400 hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="edit">edit</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-error hover:bg-error-container/20 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="delete">delete</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-white/[0.02] transition-colors group">
+<td class="px-6 py-4">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg overflow-hidden border border-white/10">
+<img class="w-full h-full object-cover" data-alt="A stylized digital profile of a senior system architect. The avatar has silver-trimmed gear and glowing teal visor accents. The lighting is crisp and cool-toned, set against a dark background with blurred network topology diagrams. The image evokes precision, authority, and advanced technical knowledge in a futuristic gaming server management context." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDTX5JvXATqU3gQtjtRaV1z5fPvTLZ3JnGEV-uYwgFzZeZc17bk73apF8ZnykNDAc_dvWXO4Y2EKY4eRod-YgAvkHxPqi0XkjME3ccf37GgHjD2cWPj6O7wUUggOmWgJxa4UZPAcOdpiAgEiOBcM5JSoO1hYsKpyXDIJdrQGTKYtvYfn6H65B2pGtQfeMDKjz4qUoebbTwVuD2J176WbhumOO7P_bzYv_KrIjuaIeZL74B2bH7nfqn41xANnmQdZ0-4pnr-PLHeNw"/>
+</div>
+<div>
+<div class="text-on-surface font-semibold text-body-sm font-body-sm">Sarah Chen</div>
+<div class="text-slate-500 text-[12px] font-code">schen@hytale.sys</div>
+</div>
+</div>
+</td>
+<td class="px-6 py-4">
+<span class="px-3 py-1 bg-orange-500/10 text-orange-400 text-[11px] font-black uppercase rounded-full border border-orange-500/20">Admin</span>
+</td>
+<td class="px-6 py-4">
+<div class="flex items-center gap-2 pl-3">
+<span class="text-orange-500 text-xs font-medium status-pulse">Online</span>
+</div>
+</td>
+<td class="px-6 py-4 text-slate-400 text-xs font-inter">Active Now</td>
+<td class="px-6 py-4 text-right">
+<div class="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+<button class="p-2 text-slate-400 hover:text-orange-400 hover:bg-orange-500/10 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="edit">edit</span>
+</button>
+<button class="p-2 text-slate-400 hover:text-error hover:bg-error-container/20 rounded-lg transition-colors">
+<span class="material-symbols-outlined text-[18px]" data-icon="delete">delete</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div class="p-6 border-t border-white/5 flex justify-between items-center text-sm">
+<div class="text-slate-500 font-inter">Showing 4 of 12 system users</div>
+<div class="flex gap-2">
+<button class="px-3 py-1 border border-white/10 rounded text-slate-500 hover:bg-white/5 disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[20px]" data-icon="chevron_left">chevron_left</span>
+</button>
+<button class="px-3 py-1 border border-white/10 rounded text-slate-400 hover:bg-white/5">
+<span class="material-symbols-outlined text-[20px]" data-icon="chevron_right">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Footer Section Info -->
+<div class="mt-lg grid grid-cols-1 md:grid-cols-2 gap-gutter">
+<div class="glass-card p-6 rounded-xl flex items-start gap-4">
+<div class="w-12 h-12 bg-orange-500/10 rounded-full flex items-center justify-center flex-shrink-0 text-orange-400">
+<span class="material-symbols-outlined" data-icon="security">security</span>
+</div>
+<div>
+<h4 class="text-on-surface font-bold mb-1">Access Control Policy</h4>
+<p class="text-slate-400 text-sm">All administrative actions are logged in the global audit trail. Roles are enforced via the node-level security engine.</p>
+<button class="mt-4 text-orange-400 text-xs font-bold uppercase tracking-widest flex items-center gap-1 hover:underline">
+                                View Audit Logs
+                                <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+<div class="glass-card p-6 rounded-xl flex items-start gap-4">
+<div class="w-12 h-12 bg-secondary/10 rounded-full flex items-center justify-center flex-shrink-0 text-secondary">
+<span class="material-symbols-outlined" data-icon="key">key</span>
+</div>
+<div>
+<h4 class="text-on-surface font-bold mb-1">2FA Enforcement</h4>
+<p class="text-slate-400 text-sm">2-Factor Authentication is currently <span class="text-orange-400 font-bold uppercase">Required</span> for all accounts with "Admin" privilege level.</p>
+<button class="mt-4 text-secondary text-xs font-bold uppercase tracking-widest flex items-center gap-1 hover:underline">
+                                Configure Security
+                                <span class="material-symbols-outlined text-[14px]" data-icon="arrow_forward">arrow_forward</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

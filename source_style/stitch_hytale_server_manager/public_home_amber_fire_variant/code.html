@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>HYTALE NETWORK | Join the Adventure</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "primary-fixed": "#ffddb8",
+                        "on-secondary-fixed-variant": "#653e00",
+                        "background": "#0b1326",
+                        "tertiary-fixed-dim": "#ffb95f",
+                        "on-primary": "#472a00",
+                        "on-error-container": "#ffdad6",
+                        "on-tertiary": "#472a00",
+                        "surface-container-high": "#222a3d",
+                        "secondary-container": "#ee9800",
+                        "secondary-fixed": "#ffddb8",
+                        "primary-container": "#ee9800",
+                        "secondary": "#ffb95f",
+                        "surface-container-low": "#131b2e",
+                        "error": "#ffb4ab",
+                        "on-primary-fixed": "#2a1700",
+                        "on-error": "#690005",
+                        "tertiary": "#ffb95f",
+                        "primary": "#ffb95f",
+                        "outline-variant": "#493c3c",
+                        "on-background": "#dae2fd",
+                        "surface-container-highest": "#2d3449",
+                        "on-secondary": "#472a00",
+                        "on-primary-container": "#5b3800",
+                        "outline": "#948a85",
+                        "on-secondary-container": "#5b3800",
+                        "inverse-surface": "#dae2fd",
+                        "on-primary-fixed-variant": "#653e00",
+                        "tertiary-container": "#ee9800",
+                        "inverse-primary": "#ee9800",
+                        "secondary-fixed-dim": "#ffb95f",
+                        "on-tertiary-fixed": "#2a1700",
+                        "surface": "#0b1326",
+                        "on-secondary-fixed": "#2a1700",
+                        "surface-dim": "#0b1326",
+                        "on-surface": "#dae2fd",
+                        "surface-bright": "#31394d",
+                        "surface-container": "#171f33",
+                        "surface-variant": "#2d3449",
+                        "tertiary-fixed": "#ffddb8",
+                        "on-tertiary-fixed-variant": "#653e00",
+                        "surface-container-lowest": "#060e20",
+                        "surface-tint": "#ffb95f",
+                        "inverse-on-surface": "#283044",
+                        "error-container": "#93000a",
+                        "on-surface-variant": "#cabdbb",
+                        "on-tertiary-container": "#5b3800",
+                        "primary-fixed-dim": "#ffb95f"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "xl": "3rem",
+                        "md": "1.5rem",
+                        "lg": "2rem",
+                        "base": "4px",
+                        "xs": "0.5rem",
+                        "sm": "1rem",
+                        "gutter": "1.5rem",
+                        "margin": "2rem"
+                    },
+                    "fontFamily": {
+                        "label-caps": ["Inter"],
+                        "body-md": ["Inter"],
+                        "headline-md": ["Inter"],
+                        "title-sm": ["Inter"],
+                        "code": ["monospace"],
+                        "body-sm": ["Inter"],
+                        "display-lg": ["Inter"]
+                    },
+                    "fontSize": {
+                        "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}],
+                        "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                        "code": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                        "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+        }
+        .rim-light {
+            border-top: 1px solid rgba(255, 255, 255, 0.15);
+        }
+        @keyframes pulse-orange {
+            0% { box-shadow: 0 0 0 0 rgba(255, 185, 95, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(255, 185, 95, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 185, 95, 0); }
+        }
+        .pulse-dot {
+            animation: pulse-orange 2s infinite;
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-background font-body-md selection:bg-primary selection:text-on-primary">
+<!-- TopAppBar -->
+<header class="bg-slate-950/80 backdrop-blur-md text-orange-500 dark:text-orange-400 font-inter tracking-wider uppercase font-bold docked full-width top-0 sticky z-50 border-b border-white/10 shadow-2xl">
+<div class="flex justify-between items-center w-full px-8 py-4 max-w-7xl mx-auto">
+<div class="text-2xl font-black text-orange-500 dark:text-orange-400 drop-shadow-[0_0_8px_rgba(255,185,95,0.5)]">
+                HYTALE NETWORK
+            </div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-orange-400 border-b-2 border-orange-500 font-label-caps text-label-caps py-1" href="#">HOME</a>
+<a class="text-slate-400 hover:text-orange-300 hover:bg-white/5 transition-all font-label-caps text-label-caps py-1 px-2 rounded" href="#">SERVERS</a>
+<a class="text-slate-400 hover:text-orange-300 hover:bg-white/5 transition-all font-label-caps text-label-caps py-1 px-2 rounded" href="#">STORE</a>
+<a class="text-slate-400 hover:text-orange-300 hover:bg-white/5 transition-all font-label-caps text-label-caps py-1 px-2 rounded" href="#">COMMUNITY</a>
+</nav>
+<button class="bg-primary text-on-primary px-4 py-2 rounded-lg font-label-caps text-label-caps active:scale-95 duration-150 hover:shadow-[0_0_15px_rgba(255,185,95,0.4)]">
+                ADMIN LOGIN
+            </button>
+</div>
+</header>
+<main>
+<!-- Hero Section -->
+<section class="relative min-h-[707px] flex items-center justify-center overflow-hidden">
+<div class="absolute inset-0 z-0">
+<div class="absolute inset-0 bg-gradient-to-b from-slate-950/60 via-slate-950/80 to-background z-10"></div>
+<img class="w-full h-full object-cover" data-alt="A breathtaking landscape of a lush Hytale-inspired fantasy forest with towering ancient trees, bioluminescent flora, and a distant misty castle under a deep twilight sky. The lighting is moody and cinematic with orange and amber highlights reflecting off scattered water crystals. The visual style is high-fidelity 3D with a focus on immersive atmosphere and mysterious adventure." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAXrN7sicLpCiUEWyziCHU3YyWAAYmZ3rhRE6Yy5yk6ztXvw3Bl8L43shSB5NMCZG4SojMDnbdWqiyTL7m4NjLEDGJzuVeGwo1TfLfhH_cXnpBOwJY4DjthpEDGCTG3Wi3LiWIKdXTBRxjXV56KOZky5y9O8Z9tYL7jm1ogMmljo-o0wy1qwl4XjaGPpri6UMgZT2XBqqhdsQrCRpM7qWt7ZKyrS5UsK-jL08EO89MUBHDMINPl1NH6q0vC8BVBjq7nFCc3N45Q-g"/>
+</div>
+<div class="relative z-20 text-center px-6 max-w-4xl mx-auto">
+<div class="inline-flex items-center gap-3 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/30 text-orange-400 mb-8">
+<span class="w-2 h-2 rounded-full bg-orange-500 pulse-dot"></span>
+<span class="font-label-caps text-label-caps tracking-widest">ALL SYSTEMS NOMINAL</span>
+</div>
+<h1 class="font-display-lg text-display-lg md:text-[80px] mb-6 text-white drop-shadow-lg leading-tight">
+                    JOIN THE <span class="text-primary">ADVENTURE</span>
+</h1>
+<p class="font-body-md text-body-md text-slate-300 mb-10 max-w-2xl mx-auto leading-relaxed">
+                    Experience the ultimate Hytale server network. Low latency, high performance, and an unmatched community experience across our dedicated game modes.
+                </p>
+<div class="flex flex-col md:flex-row items-center justify-center gap-6">
+<div class="bg-surface-container-high/40 backdrop-blur-md px-8 py-4 rounded-xl border border-white/5 flex flex-col items-center">
+<span class="font-label-caps text-label-caps text-slate-400 mb-1">TOTAL ONLINE PLAYERS</span>
+<span class="font-display-lg text-headline-md text-orange-400">1,248 / 5,000</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Server List Section -->
+<section class="py-xl px-8 max-w-7xl mx-auto">
+<div class="flex flex-col md:flex-row justify-between items-end mb-12 gap-4">
+<div>
+<h2 class="font-display-lg text-headline-md text-white mb-2">ACTIVE REALMS</h2>
+<p class="font-body-sm text-body-sm text-slate-400">Choose your destination and begin your journey.</p>
+</div>
+<div class="flex gap-2">
+<span class="px-3 py-1 bg-white/5 rounded border border-white/10 text-xs font-medium text-slate-400">V1.0.4-STABLE</span>
+</div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+<!-- Survival Card -->
+<div class="glass-card rounded-xl overflow-hidden group hover:border-primary/50 transition-all duration-300">
+<div class="h-32 bg-slate-800 relative overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60" data-alt="A detailed digital artwork of a medieval village survival spawn point with stone paths and thatched roofs under a golden sunrise. The colors are warm but grounded in a dark slate environment with professional lighting that emphasizes texture and depth. The mood is welcoming and full of potential for growth and exploration." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCrVEyVkT7EjxPEsMEE3xkzjQs3yiUPwbBX8aTYUtfgdgiT92JTu8KDcXVo9pw22YNhGTjfNz0VIFjPntqR3k6KoLcFJipvVGlpBzXHsdBtz9C141pO-JlWBoJy5UtJpAzigh5VsbIzShIe7WbLS7jhn0SfilGdeWGLqcxUZg_mwPnNjdsBGcIUpe21zhXMkPDtJCw_Xl__AYOQPGd-qEbQ5RXDpUcfEroji3pGw2AqJqkSA4VXB5SbfWtOpfiOBkWm3jluUDIT4A"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
+</div>
+<div class="p-6">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-title-sm text-title-sm text-white mb-1">Orbis Survival</h3>
+<span class="flex items-center gap-2 text-orange-400 font-label-caps text-[10px]">
+<span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> RUNNING
+                                </span>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-slate-400">PLAYERS</span>
+<p class="font-title-sm text-title-sm text-white">42 / 100</p>
+</div>
+</div>
+<button class="w-full py-3 bg-white/5 hover:bg-primary hover:text-on-primary border border-white/10 rounded-lg flex items-center justify-center gap-2 transition-all font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+                            COPY IP: play.hytale.net
+                        </button>
+</div>
+</div>
+<!-- Creative Card -->
+<div class="glass-card rounded-xl overflow-hidden group hover:border-primary/50 transition-all duration-300">
+<div class="h-32 bg-slate-800 relative overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60" data-alt="An expansive aerial view of a massive creative build featuring complex marble structures, floating gardens, and intricate geometric water features. The lighting is bright and clear with high-key whites and soft orange shadows. The visual style is architectural and clean, highlighting the limitless possibilities of creative building." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCZyUYlbpIhcIJKE4kpbZGFPTOLzAjjIHDGI0MG7ftyU_TNKIcA7Kse_wPM7s8s2qMo55LIS7WaaJ7gQb_vWNIuKshrApOKKjS-sHUCgfk-uFdl3r20zZQ2PnimIvF9RyoQXfnbzjscSnY6cDBM1-5qaiDLdHnB5C5Ebvb9bhIuvStDnO2JpsAEOPHK7Oz_-DV_TshdyhGg9XcGFjR1_h2WamlSGjddtKV2PPwowC1JYIeN3pOTzs7jmrm70uX1jZWYqYd_LAK0Kw"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
+</div>
+<div class="p-6">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-title-sm text-title-sm text-white mb-1">Architect's Reach</h3>
+<span class="flex items-center gap-2 text-orange-400 font-label-caps text-[10px]">
+<span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> RUNNING
+                                </span>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-slate-400">PLAYERS</span>
+<p class="font-title-sm text-title-sm text-white">12 / 50</p>
+</div>
+</div>
+<button class="w-full py-3 bg-white/5 hover:bg-primary hover:text-on-primary border border-white/10 rounded-lg flex items-center justify-center gap-2 transition-all font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+                            COPY IP: build.hytale.net
+                        </button>
+</div>
+</div>
+<!-- Minigames Card -->
+<div class="glass-card rounded-xl overflow-hidden group hover:border-primary/50 transition-all duration-300">
+<div class="h-32 bg-slate-800 relative overflow-hidden">
+<img class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 opacity-60" data-alt="A dynamic, high-energy shot of a fantasy arena with magic particles flying across the frame in shades of amber and orange. The scene is full of action and competitive energy, with professional esports-style lighting and deep contrast. The visual style is fast-paced and vibrant, capturing the essence of intense minigame competition." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCA_X8C0pvipGr3jXVc3_Bsl7oW1nLXI2jJ0ZjeS9CAF_QKi6K2xCXsq78oU89eR3fVtmfVAZo-kEC5cFnByOwtz3fIjMjbhjr2CiGkZMd-RUtdDkgQjSJ9AKR6ZUYi8ayP6JBbvEz0f8eA8bnERpKYeTXe7phyrAQbzPgEyO6i_LS8BHdI1_FkXJdd2ElSYW1b8ATf_1OZEEgvjy1RWu19FotZ4GwMP1dpYp2VPuSdQtD62aII3ZiY_tIGQA1JbTmUrrOGDTNBAA"/>
+<div class="absolute inset-0 bg-gradient-to-t from-slate-900 to-transparent"></div>
+</div>
+<div class="p-6">
+<div class="flex justify-between items-start mb-4">
+<div>
+<h3 class="font-title-sm text-title-sm text-white mb-1">Combat Games</h3>
+<span class="flex items-center gap-2 text-orange-400 font-label-caps text-[10px]">
+<span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span> RUNNING
+                                </span>
+</div>
+<div class="text-right">
+<span class="font-label-caps text-label-caps text-slate-400">PLAYERS</span>
+<p class="font-title-sm text-title-sm text-white">1,194 / 2,000</p>
+</div>
+</div>
+<button class="w-full py-3 bg-white/5 hover:bg-primary hover:text-on-primary border border-white/10 rounded-lg flex items-center justify-center gap-2 transition-all font-label-caps text-label-caps">
+<span class="material-symbols-outlined text-sm">content_copy</span>
+                            COPY IP: play.hytale.net
+                        </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Features Section -->
+<section class="py-xl bg-surface-container-low border-y border-white/5">
+<div class="max-w-7xl mx-auto px-8">
+<div class="text-center mb-16">
+<span class="text-primary font-label-caps text-label-caps tracking-widest">WHY JOIN US?</span>
+<h2 class="text-white font-display-lg text-headline-md mt-2">ENGINEERED FOR PERFORMANCE</h2>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-12">
+<div class="text-center">
+<div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary/20">
+<span class="material-symbols-outlined text-primary text-3xl">speed</span>
+</div>
+<h4 class="text-white font-title-sm text-title-sm mb-4">ULTRA-LOW LATENCY</h4>
+<p class="text-slate-400 font-body-sm text-body-sm leading-relaxed">
+                            Global data centers ensuring sub-20ms ping for the majority of our European and North American players.
+                        </p>
+</div>
+<div class="text-center">
+<div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary/20">
+<span class="material-symbols-outlined text-primary text-3xl">groups</span>
+</div>
+<h4 class="text-white font-title-sm text-title-sm mb-4">ACTIVE COMMUNITY</h4>
+<p class="text-slate-400 font-body-sm text-body-sm leading-relaxed">
+                            A vibrant Discord and forum ecosystem with 24/7 moderation and weekly community events.
+                        </p>
+</div>
+<div class="text-center">
+<div class="w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-primary/20">
+<span class="material-symbols-outlined text-primary text-3xl">extension</span>
+</div>
+<h4 class="text-white font-title-sm text-title-sm mb-4">CUSTOM CONTENT</h4>
+<p class="text-slate-400 font-body-sm text-body-sm leading-relaxed">
+                            Exclusive scripts, mods, and custom items designed specifically for the Hytale Network experience.
+                        </p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="bg-slate-950 w-full py-12 border-t border-white/5">
+<div class="flex flex-col md:flex-row justify-between items-center px-8 gap-6 max-w-7xl mx-auto">
+<div class="flex flex-col gap-2">
+<span class="text-orange-500 font-bold text-lg">HYTALE SERVER NETWORK</span>
+<p class="text-slate-500 font-inter text-xs tracking-widest uppercase">© 2024 HYTALE SERVER NETWORK. ALL RIGHTS RESERVED.</p>
+</div>
+<div class="flex flex-wrap justify-center gap-6">
+<a class="text-slate-500 hover:text-orange-400 transition-colors font-inter text-xs tracking-widest uppercase" href="#">SERVERS</a>
+<a class="text-slate-500 hover:text-orange-400 transition-colors font-inter text-xs tracking-widest uppercase" href="#">STATUS</a>
+<a class="text-slate-500 hover:text-orange-400 transition-colors font-inter text-xs tracking-widest uppercase" href="#">RULES</a>
+<a class="text-slate-500 hover:text-orange-400 transition-colors font-inter text-xs tracking-widest uppercase" href="#">SUPPORT</a>
+<a class="text-slate-500 hover:text-orange-400 transition-colors font-inter text-xs tracking-widest uppercase" href="#">PRIVACY</a>
+</div>
+<div class="flex gap-4">
+<a class="opacity-100 hover:opacity-80 transition-opacity" href="#">
+<img alt="Discord" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmLM1NF0fqOk37yhI6qZOAdirHCWPOfnYN4-RErJxaxvAjBazPp3bdf_iCi2YCEG5q9WzMP_NFbg--7EiZE_VGG8PrnaciHYANxRWxPvqPkPvXNAOGXLk4bDm-r2FVkeczz3ABDrHkVxropww9DTErU3fNq1Tc2vmjRtz9deN97IdH3kefs_sRxX7NhJpYXsQ3OivVBZ21dyyzJbWlV6JsasYnpR8f4emWBggwS6JJ44BZRWtJ-PeS7IvzhWkXWBzo-ojNkkQbVQ"/>
+</a>
+<a class="opacity-100 hover:opacity-80 transition-opacity" href="#">
+<img alt="X" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCMDA5hMJJOi7wAnL5-aCOm7pW0grfEztiTOH2mVLMoAz8MebDi01sXktefQMFg84A8J_U5vyXInMwYV8kKH8JhZ-73H_CBU286CPo8qFWEsVMhjwHqKdYvGAVqebJGHlU75320tO4CVqWyLMOgkVuk-7EXnD-5HDByAUAsJDetczfiYuWWOY3lI50HndOAJXEEL1q7ohUu_pHJqBdjx_7EaHviyHoih9DszxX9ay2LPDdawTBW56mozt_poiy_9azrPzas94zVIw"/>
+</a>
+<a class="opacity-100 hover:opacity-80 transition-opacity" href="#">
+<img alt="YouTube" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAM375evEfJobqkRSfwxSrq-7kCI9fIazHixpoPsQSfzRodsWUhNdV3VI2vmJZrrHLrSqgVdypT9VQ18SOb1MWUO6m0APMleXGdkOB_LXeRq0O-ZMYX9hSFwP7O8w1veYFarrf3NV53YwQ_tno-PB0Yt87gcmkdrVNvP1tRZ5G8w6_RanDTwUD11LgRyrk_OhVci-_JKMnBN0GcAq7_OwNMleP0aSJIb9aNITz4Tc0liJu1qGA6h9Ekyv8J4-0249O7sKnBihBdDQ"/>
+</a>
+</div>
+</div>
+</footer>
+</body></html>

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "secondary": "#ffb95f",
+                    "inverse-surface": "#dae2fd",
+                    "inverse-primary": "#ee9800",
+                    "surface-container": "#171f33",
+                    "primary-fixed": "#ffddb8",
+                    "tertiary-fixed": "#ffddb8",
+                    "surface-dim": "#0b1326",
+                    "on-primary-fixed-variant": "#653e00",
+                    "primary-fixed-dim": "#ffb95f",
+                    "outline": "#859490",
+                    "secondary-fixed-dim": "#ffb95f",
+                    "on-primary": "#472a00",
+                    "error-container": "#93000a",
+                    "error": "#ffb4ab",
+                    "on-secondary-container": "#5b3800",
+                    "surface-bright": "#31394d",
+                    "on-surface-variant": "#bbcac6",
+                    "on-primary-container": "#5b3800",
+                    "on-secondary-fixed": "#2a1700",
+                    "secondary-container": "#ee9800",
+                    "inverse-on-surface": "#283044",
+                    "on-tertiary": "#472a00",
+                    "surface-container-lowest": "#060e20",
+                    "on-tertiary-fixed-variant": "#653e00",
+                    "on-tertiary-fixed": "#2a1700",
+                    "tertiary-fixed-dim": "#ffb95f",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-container": "#ee9800",
+                    "on-tertiary-container": "#5b3800",
+                    "tertiary": "#ffb95f",
+                    "on-background": "#dae2fd",
+                    "surface-variant": "#2d3449",
+                    "surface": "#0b1326",
+                    "on-error": "#690005",
+                    "surface-tint": "#ffb95f",
+                    "primary-container": "#ee9800",
+                    "surface-container-high": "#222a3d",
+                    "primary": "#ffb95f",
+                    "on-secondary-fixed-variant": "#653e00",
+                    "surface-container-highest": "#2d3449",
+                    "outline-variant": "#3c4947",
+                    "secondary-fixed": "#ffddb8",
+                    "background": "#0b1326",
+                    "on-surface": "#dae2fd",
+                    "on-secondary": "#472a00",
+                    "surface-container-low": "#131b2e",
+                    "on-primary-fixed": "#2a1700"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "spacing": {
+                    "xs": "0.5rem",
+                    "margin": "2rem",
+                    "gutter": "1.5rem",
+                    "md": "1.5rem",
+                    "base": "4px",
+                    "lg": "2rem",
+                    "sm": "1rem",
+                    "xl": "3rem"
+            },
+            "fontFamily": {
+                    "body-md": ["Inter"],
+                    "title-sm": ["Inter"],
+                    "body-sm": ["Inter"],
+                    "display-lg": ["Inter"],
+                    "label-caps": ["Inter"],
+                    "code": ["monospace"],
+                    "headline-md": ["Inter"]
+            },
+            "fontSize": {
+                    "body-md": ["16px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "title-sm": ["18px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "body-sm": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "display-lg": ["48px", {"lineHeight": "1.1", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "label-caps": ["12px", {"lineHeight": "1.0", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "code": ["14px", {"lineHeight": "1.6", "fontWeight": "400"}],
+                    "headline-md": ["24px", {"lineHeight": "1.3", "letterSpacing": "-0.01em", "fontWeight": "600"}]
+            }
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .rim-light {
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+        }
+        .glass-card {
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+</head>
+<body class="bg-background text-on-surface font-body-md min-h-screen">
+<!-- NavigationDrawer -->
+<nav class="fixed left-0 top-0 h-full flex flex-col pt-4 bg-slate-950 h-screen w-64 border-r border-white/5 shadow-2xl shadow-black/50 z-50">
+<div class="px-6 mb-8 flex items-center gap-3">
+<span class="material-symbols-outlined text-orange-400" style="font-variation-settings: 'FILL' 1;">terminal</span>
+<span class="text-orange-400 font-black font-inter text-sm font-medium">Hytale Command</span>
+</div>
+<div class="px-4 mb-8">
+<div class="flex items-center gap-3 p-3 rounded-lg bg-white/5">
+<img alt="Admin Avatar" class="w-10 h-10 rounded-full border border-orange-500/30 object-cover" data-alt="A professional digital portrait of a server administrator avatar, styled with sleek neon teal accents and a high-tech minimalist aesthetic. The background is a deep slate with subtle geometric patterns representing node connections. The lighting is focused and cinematic, emphasizing a futuristic command center vibe that matches a professional DevOps environment." src="https://lh3.googleusercontent.com/aida-public/AB6AXuB1n-BDl1hzcJks3--GhaDK1NN-E5VTD6V3zkXjC7QGxL8d4bmYoQ4q_p5sFZffVSv3hEmQAWeIuP8WDZ4C9aojeSdCeOG-rSvXtMLU-MkAmu241QTtIqqbZ2q0POtwIMb3mC0dr8C5eGmX4gYPlxCrxLMUY8WqbUvaotCePoxrS0agNXbO66UxCkjGPJ8OeLnkabm7qk87rOTapru9J3MjY7P2cb2vI7x0MxYNV122M4Tt9HSZQIXSRH3hsGzpIZ7YHW7WL-4RmA"/>
+<div class="flex flex-col">
+<span class="font-inter text-sm font-medium text-orange-400">Server Admin</span>
+<span class="text-[10px] text-slate-500 uppercase tracking-widest">Hytale Node 01</span>
+</div>
+</div>
+</div>
+<div class="flex flex-col gap-1 px-2">
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+                Dashboard
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">install_mobile</span>
+                Console
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">folder_open</span>
+                Files
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-white/5 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined">group</span>
+                Players
+            </a>
+<a class="flex items-center gap-3 px-4 py-3 rounded-lg bg-orange-500/10 text-orange-400 border-r-2 border-orange-500 transition-colors cursor-pointer active:bg-white/10 font-inter text-sm font-medium" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+                Settings
+            </a>
+</div>
+<div class="mt-auto p-4 border-t border-white/5">
+<span class="text-[10px] text-slate-600 font-mono">SYSTEM VERSION v1.4.2</span>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<main class="ml-64 min-h-screen flex flex-col">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center w-full px-6 h-16 sticky top-0 z-50 bg-slate-950/80 backdrop-blur-md border-b border-white/10 shadow-[0_-1px_0_rgba(255,255,255,0.1)_inset]">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-orange-500 transition-all duration-200 active:scale-95 cursor-pointer">terminal</span>
+<h1 class="text-xl font-bold tracking-tighter text-orange-400 font-inter">Settings</h1>
+</div>
+<div class="flex items-center gap-4">
+<button class="p-2 rounded-full hover:bg-white/5 text-slate-400 hover:text-orange-300 transition-all duration-200 active:scale-95">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<span class="material-symbols-outlined text-orange-500 transition-all duration-200 active:scale-95 cursor-pointer">account_circle</span>
+</div>
+</header>
+<!-- Page Canvas -->
+<div class="p-margin max-w-6xl w-full mx-auto">
+<!-- Hero Header -->
+<div class="mb-xl">
+<h2 class="font-display-lg text-display-lg text-on-surface mb-xs">Configuration</h2>
+<p class="text-on-surface-variant font-body-md max-w-2xl">Manage your account security, system preferences, and global node settings from the command center.</p>
+</div>
+<!-- Bento Grid Layout -->
+<div class="grid grid-cols-12 gap-gutter">
+<!-- Account Section -->
+<section class="col-span-12 lg:col-span-8">
+<div class="glass-card rounded-xl p-lg rim-light h-full">
+<div class="flex items-center gap-3 mb-md border-b border-white/5 pb-sm">
+<span class="material-symbols-outlined text-orange-400">shield_person</span>
+<h3 class="font-headline-md text-headline-md">Account Security</h3>
+</div>
+<div class="space-y-lg">
+<div class="grid grid-cols-1 md:grid-cols-2 gap-md">
+<div class="space-y-xs">
+<label class="font-label-caps text-label-caps text-on-surface-variant block">CURRENT PASSWORD</label>
+<input class="w-full bg-surface-container-low border border-white/10 rounded-lg p-sm text-body-sm focus:border-orange-500 focus:ring-0 transition-colors" placeholder="••••••••" type="password"/>
+</div>
+<div class="space-y-xs">
+<label class="font-label-caps text-label-caps text-on-surface-variant block">NEW PASSWORD</label>
+<input class="w-full bg-surface-container-low border border-white/10 rounded-lg p-sm text-body-sm focus:border-orange-500 focus:ring-0 transition-colors" placeholder="••••••••" type="password"/>
+</div>
+</div>
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-md p-md bg-white/5 rounded-lg">
+<div>
+<h4 class="font-title-sm text-title-sm text-primary">Two-Factor Authentication</h4>
+<p class="text-body-sm text-on-surface-variant">Add an extra layer of security to your administrator account.</p>
+</div>
+<button class="bg-primary text-on-primary font-label-caps px-md py-sm rounded-lg hover:shadow-[0_0_15px_rgba(255,185,95,0.4)] transition-all">ENABLE 2FA</button>
+</div>
+<div class="flex justify-end gap-sm pt-md">
+<button class="px-md py-sm text-orange-400 font-label-caps border border-orange-500/50 rounded-lg hover:bg-orange-500/10 transition-all">CANCEL</button>
+<button class="px-md py-sm bg-primary text-on-primary font-label-caps rounded-lg hover:shadow-[0_0_20px_rgba(255,185,95,0.5)] transition-all">UPDATE PASSWORD</button>
+</div>
+</div>
+</div>
+</section>
+<!-- System Info Section -->
+<section class="col-span-12 lg:col-span-4">
+<div class="glass-card rounded-xl p-lg rim-light h-full bg-black/40">
+<div class="flex items-center gap-3 mb-md border-b border-white/5 pb-sm">
+<span class="material-symbols-outlined text-secondary">database</span>
+<h3 class="font-headline-md text-headline-md">Environment</h3>
+</div>
+<div class="space-y-md">
+<div class="p-sm bg-surface-container-highest rounded border-l-2 border-orange-500">
+<div class="flex justify-between items-center mb-base">
+<span class="text-label-caps text-on-surface-variant">NODE.JS VERSION</span>
+<span class="font-code text-orange-400 text-body-sm">v18.17.1</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full overflow-hidden">
+<div class="w-full h-full bg-orange-500"></div>
+</div>
+</div>
+<div class="p-sm bg-surface-container-highest rounded border-l-2 border-secondary">
+<div class="flex justify-between items-center mb-base">
+<span class="text-label-caps text-on-surface-variant">SQLITE VERSION</span>
+<span class="font-code text-secondary text-body-sm">3.42.0</span>
+</div>
+<div class="h-1 bg-white/5 rounded-full overflow-hidden">
+<div class="w-4/5 h-full bg-secondary"></div>
+</div>
+</div>
+<div class="p-sm bg-surface-container-highest rounded border-l-2 border-primary">
+<div class="flex justify-between items-center mb-base">
+<span class="text-label-caps text-on-surface-variant">OS ARCHITECTURE</span>
+<span class="font-code text-primary text-body-sm">Linux x64</span>
+</div>
+</div>
+<div class="mt-lg pt-md">
+<div class="flex items-center gap-2 text-xs text-on-surface-variant opacity-60">
+<span class="material-symbols-outlined text-xs">info</span>
+<span>Last checked: 2 minutes ago</span>
+</div>
+<button class="w-full mt-md py-xs text-label-caps border border-white/10 rounded hover:bg-white/5 transition-all">REFRESH METRICS</button>
+</div>
+</div>
+</div>
+</section>
+<!-- App Settings Section -->
+<section class="col-span-12">
+<div class="glass-card rounded-xl p-lg rim-light">
+<div class="flex items-center gap-3 mb-md border-b border-white/5 pb-sm">
+<span class="material-symbols-outlined text-primary">tune</span>
+<h3 class="font-headline-md text-headline-md">Application Preferences</h3>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-lg">
+<!-- Theme Toggle -->
+<div class="p-md rounded-xl bg-surface-container hover:bg-surface-container-high transition-all group">
+<div class="flex items-center justify-between mb-sm">
+<div class="flex items-center gap-3">
+<div class="p-2 bg-orange-500/20 rounded-lg text-orange-400">
+<span class="material-symbols-outlined">dark_mode</span>
+</div>
+<span class="font-title-sm text-title-sm">Interface Theme</span>
+</div>
+<div class="relative inline-flex items-center cursor-pointer">
+<div class="w-11 h-6 bg-primary rounded-full"></div>
+<div class="absolute left-1 top-1 bg-on-primary w-4 h-4 rounded-full transition-transform translate-x-5"></div>
+</div>
+</div>
+<p class="text-body-sm text-on-surface-variant">Toggle between dark command mode and light maintenance mode.</p>
+</div>
+<!-- Log Retention -->
+<div class="p-md rounded-xl bg-surface-container hover:bg-surface-container-high transition-all">
+<div class="flex items-center gap-3 mb-sm">
+<div class="p-2 bg-secondary/20 rounded-lg text-secondary">
+<span class="material-symbols-outlined">history</span>
+</div>
+<span class="font-title-sm text-title-sm">Log Retention</span>
+</div>
+<select class="w-full bg-surface-container-low border border-white/10 rounded-lg p-sm text-body-sm focus:border-secondary focus:ring-0 mb-xs">
+<option>Keep for 7 days</option>
+<option selected="">Keep for 30 days</option>
+<option>Keep for 90 days</option>
+<option>Unlimited</option>
+</select>
+<p class="text-[11px] text-on-surface-variant/60 italic">Longer retention increases database size on Hytale Node 01.</p>
+</div>
+<!-- Maintenance Window -->
+<div class="p-md rounded-xl bg-surface-container hover:bg-surface-container-high transition-all">
+<div class="flex items-center gap-3 mb-sm">
+<div class="p-2 bg-error/20 rounded-lg text-error">
+<span class="material-symbols-outlined">event_busy</span>
+</div>
+<span class="font-title-sm text-title-sm">Auto-Updates</span>
+</div>
+<div class="flex items-center justify-between">
+<span class="text-body-sm text-on-surface-variant">Scheduled Updates</span>
+<span class="px-2 py-1 bg-error-container text-error text-[10px] font-bold rounded">DISABLED</span>
+</div>
+<div class="mt-md">
+<button class="w-full py-xs text-label-caps border border-error/30 text-error rounded hover:bg-error/10 transition-all">CONFIGURE WINDOW</button>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Status Banner -->
+<div class="col-span-12 flex items-center gap-4 p-md glass-card rounded-xl border-orange-500/30">
+<div class="relative">
+<div class="w-3 h-3 bg-orange-500 rounded-full"></div>
+<div class="absolute inset-0 w-3 h-3 bg-orange-500 rounded-full animate-ping opacity-75"></div>
+</div>
+<div class="flex-1 flex items-center justify-between">
+<span class="font-label-caps text-orange-400">SERVER STATUS: OPTIMAL</span>
+<span class="text-body-sm text-on-surface-variant font-code">Latency: 24ms | Uptime: 14d 06h 22m</span>
+</div>
+</div>
+</div>
+<!-- Visual Decoration Footer -->
+<div class="mt-xl opacity-20 pointer-events-none">
+<div class="h-px w-full bg-gradient-to-r from-transparent via-orange-500 to-transparent"></div>
+</div>
+</div>
+</main>
+<!-- Visual Identity Background Elements -->
+<div class="fixed inset-0 pointer-events-none z-[-1] overflow-hidden">
+<div class="absolute -top-[10%] -right-[10%] w-[40%] h-[40%] bg-orange-500/5 blur-[120px] rounded-full"></div>
+<div class="absolute bottom-[5%] left-[10%] w-[30%] h-[30%] bg-secondary/5 blur-[100px] rounded-full"></div>
+</div>
+</body></html>

@@ -1,0 +1,8 @@
+version: "2.0"
+
+context:
+  # Tell the 2.0 agent where your global playground rules are stored
+  skills_dir: "C:\\secbrain\\kostais\\00_AI_Config\\Antigravity_Skills"
+  
+  # Allow the agent to dump final logs and reports here automatically
+  output_dir: "C:\\secbrain\\kostais\\01_Inbox\\AI_Audits"

@@ -1,0 +1,14 @@
+{
+  "name": "hytale-cluster-manager",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "start": "npm start --workspace=backend"
+  }
+}

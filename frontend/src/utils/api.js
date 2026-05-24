@@ -1,0 +1,82 @@
+export const API_BASE_URL = window.location.port === '5173'
+  ? 'http://localhost:5600/api'
+  : '/api';
+
+export const WS_BASE_URL = window.location.port === '5173'
+  ? 'ws://localhost:5600/ws'
+  : `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`;
+
+export function getToken() {
+  return localStorage.getItem('token');
+}
+
+export function setToken(token) {
+  localStorage.setItem('token', token);
+}
+
+export function clearToken() {
+  localStorage.removeItem('token');
+}
+
+export function getUser() {
+  const token = getToken();
+  if (!token) return null;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return {
+      id: payload.sub,
+      username: payload.username,
+      role: payload.role,
+      exp: payload.exp
+    };
+  } catch (err) {
+    return null;
+  }
+}
+
+export async function apiRequest(endpoint, options = {}) {
+  const token = getToken();
+  const headers = {
+    'Accept': 'application/json',
+    ...options.headers,
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
+  // Handle JSON payload serialization
+  let body = options.body;
+  if (body && typeof body === 'object' && !(body instanceof FormData) && !(body instanceof Blob)) {
+    headers['Content-Type'] = 'application/json';
+    body = JSON.stringify(body);
+  }
+
+  const url = `${API_BASE_URL}${endpoint}`;
+
+  try {
+    const res = await fetch(url, { ...options, headers, body });
+    
+    if (res.status === 401) {
+      clearToken();
+      if (!window.location.hash.includes('/login') && !window.location.pathname.includes('/login')) {
+        window.location.href = '#/login';
+      }
+      throw new Error('Unauthorized');
+    }
+
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.message || `API error: ${res.statusText} (${res.status})`);
+    }
+
+    // Check content type before parsing
+    const contentType = res.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      return await res.json();
+    }
+    return null;
+  } catch (err) {
+    throw err;
+  }
+}
