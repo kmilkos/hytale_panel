@@ -151,7 +151,7 @@ async function startServer() {
     serverEvents.on('log', (event) => {
       wss.clients.forEach(client => {
         if (client.readyState === 1 && client.subs && client.subs.has(event.serverId)) {
-          client.send(JSON.stringify(event));
+          client.send(JSON.stringify({ ...event, type: 'log' }));
         }
       });
     });
@@ -159,7 +159,7 @@ async function startServer() {
     serverEvents.on('status', (event) => {
       wss.clients.forEach(client => {
         if (client.readyState === 1 && client.subs && client.subs.has(event.serverId)) {
-          client.send(JSON.stringify(event));
+          client.send(JSON.stringify({ ...event, type: 'status' }));
         }
       });
     });
@@ -167,7 +167,7 @@ async function startServer() {
     serverEvents.on('players', (event) => {
       wss.clients.forEach(client => {
         if (client.readyState === 1 && client.subs && client.subs.has(event.serverId)) {
-          client.send(JSON.stringify(event));
+          client.send(JSON.stringify({ ...event, type: 'players' }));
         }
       });
     });
