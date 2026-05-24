@@ -58,6 +58,10 @@ async function startServer() {
     
     // 2. Bootstrap Admin User
     await bootstrapAdmin(db);
+
+    // Correct dangling server statuses on start
+    db.prepare("UPDATE servers SET status = 'stopped' WHERE status IN ('running', 'stopping')").run();
+    logger.info("Dangling server statuses reset to 'stopped' on startup.");
     
     // Start background cron restarts & players poller scheduler
     startScheduler(db);
