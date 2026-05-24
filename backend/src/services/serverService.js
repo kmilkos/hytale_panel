@@ -1061,7 +1061,7 @@ async function installServerFiles(db, serverId) {
     fs.copyFileSync(srcAssets, destAssets);
   }
 
-  // Deploy Server/ folder (Use native symbolic directory link with fallback to copy)
+  // Deploy Server/ folder (Physically isolate directory, symlink massive HytaleServer.jar, copy secondary files)
   const srcServer = path.join(sharedDir, 'Server');
   const destServer = path.join(targetDir, 'Server');
   try {
@@ -1073,12 +1073,38 @@ async function installServerFiles(db, serverId) {
         fs.unlinkSync(destServer);
       }
     }
-    logger.info(`Linking Server/ folder from central cache: ${destServer} -> ${srcServer}`);
-    const symlinkType = process.platform === 'win32' ? 'junction' : 'dir';
-    fs.symlinkSync(srcServer, destServer, symlinkType);
+    fs.mkdirSync(destServer, { recursive: true });
+
+    // 1. Symlink the massive HytaleServer.jar to save space
+    const srcJar = path.join(srcServer, 'HytaleServer.jar');
+    const destJar = path.join(destServer, 'HytaleServer.jar');
+    try {
+      logger.info(`Linking HytaleServer.jar from central cache: ${destJar} -> ${srcJar}`);
+      fs.symlinkSync(srcJar, destJar, 'file');
+    } catch (err) {
+      logger.warn(`Symlink failed for HytaleServer.jar, falling back to file copy: ${err.message}`);
+      if (fs.existsSync(srcJar)) {
+        fs.copyFileSync(srcJar, destJar);
+      }
+    }
+
+    // 2. Copy secondary files/configs from shared Server folder
+    if (fs.existsSync(srcServer)) {
+      const files = fs.readdirSync(srcServer);
+      files.forEach(file => {
+        if (file === 'HytaleServer.jar') return;
+        const srcFile = path.join(srcServer, file);
+        const destFile = path.join(destServer, file);
+        try {
+          fs.cpSync(srcFile, destFile, { recursive: true, dereference: false });
+        } catch (copyErr) {
+          logger.warn(`Failed to copy secondary Server file ${file}: ${copyErr.message}`);
+        }
+      });
+    }
   } catch (err) {
-    logger.warn(`Symlink failed for Server/ folder, falling back to directory copy: ${err.message}`);
-    fs.cpSync(srcServer, destServer, { recursive: true, dereference: false });
+    logger.error(`Deployment failed for Server/ directory: ${err.message}`);
+    throw new HttpError(500, `Failed to deploy Server/ directory: ${err.message}`);
   }
 
   // Generate startup scripts
