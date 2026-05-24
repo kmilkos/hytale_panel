@@ -1034,7 +1034,7 @@ export default function ServerDetail() {
       </header>
 
       {/* Tab Panels */}
-      <main style={{ flex: 1, padding: '32px', maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
+      <main style={{ flex: 1, padding: '32px', width: '100%' }}>
         {server.status === 'uninstalled' && activeTab !== 'config' ? (
           <div className="glass-panel animate-fade-in" style={{
             padding: '48px 32px',
