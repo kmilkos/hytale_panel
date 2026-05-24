@@ -198,7 +198,19 @@ export default function ServerDetail() {
     };
 
     ws.onclose = () => {
-      console.log('Console WebSocket closed.');
+      console.log('Console WebSocket closed. Reconnecting in 3s...');
+      if (wsRef.current === ws) {
+        wsRef.current = null;
+        setTimeout(() => {
+          if (activeTab === 'console') {
+            connectWebSocket();
+          }
+        }, 3000);
+      }
+    };
+
+    ws.onerror = (err) => {
+      console.error('Console WebSocket error:', err);
     };
   };
 
@@ -266,8 +278,9 @@ export default function ServerDetail() {
 
   const cleanAnsiCodes = (line) => {
     if (!line) return '';
+    const str = typeof line === 'string' ? line : String(line);
     // Strip real ANSI escape codes
-    let clean = line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+    let clean = str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
     // Strip literal raw ANSI remnants like [m, [32m, [1m, [0m
     clean = clean.replace(/\[[0-9;]*m/g, '');
     return clean;
