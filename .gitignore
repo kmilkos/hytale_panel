@@ -22,7 +22,7 @@ scratch/
 
 # Cache and Runtime Data
 shared/
-backend/servers/
+servers/
 backend/data/
 backend/uploads/
 java-25/

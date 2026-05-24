@@ -35,7 +35,7 @@ const config = {
   host: process.env.HOST || '127.0.0.1',
   port: parseInt(process.env.PORT || '5500', 10),
   dbPath: path.resolve(__dirname, '../../', process.env.DB_PATH || 'data/hytale-manager.db'),
-  serversDir: path.resolve(__dirname, '../../', process.env.SERVERS_DIR || 'servers'),
+  serversDir: path.resolve(__dirname, '../../../', process.env.SERVERS_DIR || 'servers'),
   uploadsDir: path.resolve(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads'),
   jwtSecret: process.env.JWT_SECRET,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN || '12h',

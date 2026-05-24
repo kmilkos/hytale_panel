@@ -72,7 +72,6 @@ A state-of-the-art, high-fidelity dark-themed glassmorphic cluster management da
 hytale_panel/
 ├── backend/                  # Node.js Express Backend API
 │   ├── data/                 # SQLite database storage (ignored by git)
-│   ├── servers/              # Managed Hytale instance files (ignored by git)
 │   ├── src/
 │   │   ├── config/           # Environment configuration maps
 │   │   ├── db/               # SQLite connection and schema migrations
@@ -81,6 +80,7 @@ hytale_panel/
 │   │   ├── services/         # Installer pipelines, process metrics, cron managers
 │   │   └── server.js         # API & Websocket upgrade bootstrap
 │   └── nodemon.json          # Isolated nodemon directories watcher config
+├── servers/                  # Relocated Hytale server instances folder (ignored by git)
 ├── frontend/                 # Vite + React Frontend Client
 │   ├── src/
 │   │   ├── views/            # Dashboard view, System settings, Server details panel
@@ -163,5 +163,5 @@ npm run dev
 ## 🛡️ Git Staging Rules
 
 All massive binary files are excluded in the root `.gitignore` file to keep the repository under 10 MB:
-* **Excluded**: `node_modules/`, `shared/` (1.4 GB caches), `java-25/`, `backend/servers/` (instance duplicates), `backend/data/` (SQLite databases), and all `.log` or `.env` configuration keys.
+* **Excluded**: `node_modules/`, `shared/` (1.4 GB caches), `java-25/`, `servers/` (instance duplicates), `backend/data/` (SQLite databases), and all `.log` or `.env` configuration keys.
 * **Contribution Workflow**: Stage and commit lightweight files only. Avoid pushing local `.env` keys or absolute installation paths to ensure cross-platform compatibility.
