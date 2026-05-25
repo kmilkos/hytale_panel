@@ -774,6 +774,14 @@ export default function ServerDetail() {
   };
 
   const renderSVGChart = (type) => {
+    if (!server || server.status !== 'running') {
+      return (
+        <div style={{ color: 'var(--text-dark)', textAlign: 'center', padding: '48px 16px', fontSize: '11px', fontStyle: 'italic' }}>
+          Server is offline
+        </div>
+      );
+    }
+
     if (metrics.length === 0) {
       return <div style={{ color: 'var(--text-dark)', textAlign: 'center', padding: '32px' }}>No performance logs recorded yet.</div>;
     }
@@ -1370,7 +1378,7 @@ export default function ServerDetail() {
               <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '16px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                   <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '16px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
-                    System Metrics ({metricsRange})
+                    Server Metrics ({metricsRange})
                   </h3>
                   <div style={{ display: 'flex', gap: '2px', backgroundColor: 'rgba(0,0,0,0.4)', padding: '2px', borderRadius: '6px', border: '1px solid var(--border)' }}>
                     {['1m', '30m', '1h'].map((r) => (
@@ -1399,7 +1407,7 @@ export default function ServerDetail() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: '500' }}>
                       <span>CPU Utilization</span>
                       <span style={{ color: '#10b981', fontWeight: '600' }}>
-                        {metrics.length > 0 ? `${metrics[metrics.length - 1].cpu_percentage}%` : '0%'}
+                        {server.status === 'running' && metrics.length > 0 ? `${metrics[metrics.length - 1].cpu_percentage}%` : '0%'}
                       </span>
                     </div>
                     <div style={{ height: '120px', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.25)' }}>
@@ -1410,7 +1418,7 @@ export default function ServerDetail() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '6px', fontWeight: '500' }}>
                       <span>Memory Utilization</span>
                       <span style={{ color: '#3b82f6', fontWeight: '600' }}>
-                        {metrics.length > 0 ? `${(metrics[metrics.length - 1].ram_bytes / (1024*1024*1024)).toFixed(2)} GB` : '0.00 GB'}
+                        {server.status === 'running' && metrics.length > 0 ? `${(metrics[metrics.length - 1].ram_bytes / (1024*1024*1024)).toFixed(2)} GB` : '0.00 GB'}
                       </span>
                     </div>
                     <div style={{ height: '120px', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'rgba(0,0,0,0.25)' }}>
