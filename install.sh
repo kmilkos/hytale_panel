@@ -184,7 +184,7 @@ fi
 # Configure npm to use python3 for native builds
 if command -v python3 &> /dev/null; then
   echo "[*] Configuring NPM to use Python3 for native C++ builds..."
-  npm config set python python3
+  export PYTHON=python3
 fi
 
 echo "[*] Installing NPM dependencies..."
@@ -194,8 +194,10 @@ echo "[*] Compiling frontend production bundle..."
 npm run build
 
 # Configure Systemd daemon service
-echo "[*] Creating systemd service file: $SERVICE_FILE"
-cat <<EOF > "$SERVICE_FILE"
+if command -v systemctl &>/dev/null && [ -d /run/systemd/system ]; then
+  echo "[*] Creating systemd service file: $SERVICE_FILE"
+  NODE_BIN=$(command -v node || which node || echo "/usr/bin/node")
+  cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=Hytale Cluster Manager Service
 After=network.target
@@ -204,24 +206,28 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=${APP_DIR}/backend
-ExecStart=$(command -v node) src/server.js
+ExecStart=$NODE_BIN ${APP_DIR}/backend/src/server.js
 Restart=always
-Environment=NODE_ENV=production PORT=5500 HOST=0.0.0.0
+Environment="NODE_ENV=production" "PORT=5500" "HOST=0.0.0.0"
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-echo "[*] Reloading systemd daemon..."
-systemctl daemon-reload
+  echo "[*] Reloading systemd daemon..."
+  systemctl daemon-reload
 
-echo "[*] Enabling and starting Hytale Cluster Manager service..."
-systemctl enable hytale-manager
-systemctl start hytale-manager
+  echo "[*] Enabling and starting Hytale Cluster Manager service..."
+  systemctl enable hytale-manager
+  systemctl start hytale-manager
+else
+  echo "[!] Systemd is not running or not available. Skipping systemd service setup."
+  echo "[!] You can run the application manually by navigating to ${APP_DIR}/backend and running: node src/server.js"
+fi
 
 echo ""
 echo "[+] SUCCESS: Hytale Cluster Manager installed and started successfully!"
 echo "[+] You can access the panel at: http://127.0.0.1:5500"
 echo "[+] Run log monitoring command: journalctl -u hytale-manager -f"
 echo "[+] Uninstall the service at any time by running: sudo ./install.sh --uninstall"
-EOF
+

@@ -80,6 +80,7 @@ export default function ServerDetail() {
   const fileInputRef = useRef(null);
 
   // 3. Mods Tab State
+  const modFileInputRef = useRef(null);
   const [installedMods, setInstalledMods] = useState([]);
   const [modsSearchQuery, setModsSearchQuery] = useState('');
   const [modsSource, setModsSource] = useState('curseforge'); // 'curseforge' | 'nexus'
@@ -913,6 +914,39 @@ export default function ServerDetail() {
     }
   };
 
+  const handleUploadMod = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const ext = file.name.split('.').pop().toLowerCase();
+    if (ext !== 'jar' && ext !== 'zip') {
+      alert('Only .jar and .zip mod files are allowed.');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/mods/server/${id}/upload?filename=${encodeURIComponent(file.name)}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getToken()}`
+        },
+        body: file
+      });
+
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || 'Mod upload failed.');
+      }
+
+      alert(`Successfully uploaded mod: ${file.name}`);
+      fetchInstalledMods();
+    } catch (err) {
+      alert(`Mod upload failed: ${err.message}`);
+    } finally {
+      if (modFileInputRef.current) modFileInputRef.current.value = '';
+    }
+  };
+
   // BACKUPS TAB API
   const fetchBackups = async () => {
     try {
@@ -1605,7 +1639,18 @@ export default function ServerDetail() {
                 </div>
 
                 <div style={{ display: 'flex', gap: '12px' }}>
-                  <button onClick={handleScanConflicts} className="btn btn-accent" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={isViewer}>
+                  <button onClick={() => modFileInputRef.current?.click()} className="btn btn-accent" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={isViewer}>
+                    Upload Mod (.jar/.zip)
+                  </button>
+                  <input 
+                    type="file" 
+                    ref={modFileInputRef} 
+                    onChange={handleUploadMod} 
+                    style={{ display: 'none' }} 
+                    accept=".jar,.zip"
+                    disabled={isViewer}
+                  />
+                  <button onClick={handleScanConflicts} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={isViewer}>
                     Scan for Conflicts
                   </button>
                 </div>

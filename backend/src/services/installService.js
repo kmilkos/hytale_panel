@@ -36,12 +36,12 @@ async function downloadModFile(db, serverId, downloadUrl, fileName, options = {}
     throw new HttpError(404, `Server with ID ${serverId} not found.`);
   }
 
-  const modsDir = path.join(server.install_path, 'Server', 'mods');
+  const modsDir = path.join(server.install_path, 'mods');
   if (!fs.existsSync(modsDir)) {
     fs.mkdirSync(modsDir, { recursive: true });
   }
 
-  const targetPath = resolveSafePath(server.install_path, path.join('Server', 'mods', fileName));
+  const targetPath = resolveSafePath(server.install_path, path.join('mods', fileName));
 
   // Check if already downloading or installed
   const downloadId = `${serverId}_${fileName}`;

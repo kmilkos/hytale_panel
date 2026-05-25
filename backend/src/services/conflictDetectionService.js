@@ -11,7 +11,7 @@ async function detectConflicts(db, serverId) {
     throw new Error(`Server with ID ${serverId} not found.`);
   }
 
-  const modsDir = path.join(server.install_path, 'Server', 'mods');
+  const modsDir = path.join(server.install_path, 'mods');
   if (!fs.existsSync(modsDir)) {
     // If mods dir doesn't exist, create it and return empty conflicts
     fs.mkdirSync(modsDir, { recursive: true });

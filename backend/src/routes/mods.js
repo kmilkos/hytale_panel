@@ -20,7 +20,7 @@ module.exports = function(db) {
   // Helper to resolve server mods directory path
   function resolveModsDir(serverId) {
     const server = getServer(db, parseInt(serverId, 10));
-    const modsDir = path.join(server.install_path, 'Server', 'mods');
+    const modsDir = path.join(server.install_path, 'mods');
     if (!fs.existsSync(modsDir)) {
       fs.mkdirSync(modsDir, { recursive: true });
     }
@@ -112,7 +112,7 @@ module.exports = function(db) {
       if (!fileName) throw new HttpError(400, 'FileName is required.');
       
       const { modsDir, server } = resolveModsDir(serverId);
-      const safeOldPath = resolveSafePath(server.install_path, path.join('Server', 'mods', fileName));
+      const safeOldPath = resolveSafePath(server.install_path, path.join('mods', fileName));
       
       if (!fs.existsSync(safeOldPath)) {
         throw new HttpError(404, 'Mod file not found.');
@@ -125,7 +125,7 @@ module.exports = function(db) {
         newFileName = fileName + '.disabled';
       }
 
-      const safeNewPath = resolveSafePath(server.install_path, path.join('Server', 'mods', newFileName));
+      const safeNewPath = resolveSafePath(server.install_path, path.join('mods', newFileName));
       fs.renameSync(safeOldPath, safeNewPath);
 
       // Log audit trail
@@ -149,7 +149,7 @@ module.exports = function(db) {
       if (!fileName) throw new HttpError(400, 'FileName is required.');
 
       const { modsDir, server } = resolveModsDir(serverId);
-      const safePath = resolveSafePath(server.install_path, path.join('Server', 'mods', fileName));
+      const safePath = resolveSafePath(server.install_path, path.join('mods', fileName));
 
       if (!fs.existsSync(safePath)) {
         throw new HttpError(404, 'Mod file not found.');
@@ -364,6 +364,76 @@ module.exports = function(db) {
         .run(req.user.sub, 'install-mod', `server:${serverId}`, `Triggered install of mod ${fileName} from ${source || 'direct'}${restoreBackupId ? ' (restored backup ' + restoreBackupId + ')' : ''}`, req.ip);
 
       res.status(202).json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/mods/server/:serverId/upload - Upload a mod file manually (raw stream)
+  router.post('/server/:serverId/upload', async (req, res, next) => {
+    const { serverId } = req.params;
+    const filename = req.headers['x-file-name'] || req.query.filename;
+    try {
+      if (!filename) throw new HttpError(400, 'filename query parameter or x-file-name header is required.');
+
+      const ext = path.extname(filename).toLowerCase();
+      if (ext !== '.jar' && ext !== '.zip' && ext !== '.disabled') {
+        throw new HttpError(400, 'Only .jar and .zip mod files are allowed.');
+      }
+
+      const { modsDir, server } = resolveModsDir(serverId);
+      const safePath = resolveSafePath(server.install_path, path.join('mods', filename));
+
+      const writeStream = fs.createWriteStream(safePath);
+      req.pipe(writeStream);
+
+      writeStream.on('finish', async () => {
+        try {
+          const relativeInstalledPath = path.relative(server.install_path, safePath);
+          const stat = fs.statSync(safePath);
+          
+          // Calculate SHA1 checksum
+          const fileBuffer = fs.readFileSync(safePath);
+          const calculatedSha1 = require('crypto').createHash('sha1').update(fileBuffer).digest('hex');
+
+          db.prepare(`
+            INSERT INTO installed_mods (
+              server_id, curseforge_mod_id, curseforge_file_id, mod_name, file_name,
+              file_length, sha1, cdn_url, cdn_url_resolved_at, installed_path, installed_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            ON CONFLICT(server_id, curseforge_mod_id, curseforge_file_id) DO UPDATE SET
+              file_name = excluded.file_name,
+              file_length = excluded.file_length,
+              sha1 = excluded.sha1,
+              installed_path = excluded.installed_path,
+              updated_at = datetime('now')
+          `).run(
+            serverId,
+            'manual',
+            'manual',
+            filename.replace(/\.(jar|zip|disabled)$/i, ''),
+            filename,
+            stat.size,
+            calculatedSha1,
+            null,
+            null,
+            relativeInstalledPath
+          );
+
+          await detectConflicts(db, serverId);
+
+          db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
+            .run(req.user.sub, 'upload-mod', `server:${serverId}`, `Manually uploaded mod file ${filename}`, req.ip);
+
+          res.json({ message: 'Mod uploaded and registered successfully.', fileName: filename });
+        } catch (err) {
+          next(err);
+        }
+      });
+
+      writeStream.on('error', (err) => {
+        next(new HttpError(500, `Mod upload stream failed: ${err.message}`));
+      });
     } catch (err) {
       next(err);
     }
