@@ -9,6 +9,7 @@
   "scripts": {
     "dev": "npm run dev --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
-    "start": "npm start --workspace=backend"
+    "start": "npm start --workspace=backend",
+    "reset-admin": "npm run reset-admin --workspace=backend"
   }
 }
