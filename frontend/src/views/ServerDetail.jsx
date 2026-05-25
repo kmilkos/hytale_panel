@@ -248,6 +248,24 @@ export default function ServerDetail() {
   const [whitelistContent, setWhitelistContent] = useState('');
   const [bansContent, setBansContent] = useState('');
   const [savingPlayers, setSavingPlayers] = useState(false);
+  const [whitelistArray, setWhitelistArray] = useState([]);
+  const [bansArray, setBansArray] = useState([]);
+  const [playerStats, setPlayerStats] = useState([]);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsSearchQuery, setStatsSearchQuery] = useState('');
+  const [historySearchQuery, setHistorySearchQuery] = useState('');
+  const [historyEventFilter, setHistoryEventFilter] = useState('all');
+  const [newWhitelistName, setNewWhitelistName] = useState('');
+  const [newBanName, setNewBanName] = useState('');
+  const [ticker, setTicker] = useState(0);
+
+  useEffect(() => {
+    if (activeTab !== 'players') return;
+    const interval = setInterval(() => {
+      setTicker(t => t + 1);
+    }, 10000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
 
   // 7. Diagnostics / Logger Tab State
   const [diagnostics, setDiagnostics] = useState([]);
@@ -295,6 +313,7 @@ export default function ServerDetail() {
     if (activeTab === 'players') {
       fetchOnlinePlayers();
       fetchPlayerHistory();
+      fetchPlayerStats();
     }
 
     if (activeTab === 'schedules') {
@@ -581,8 +600,12 @@ export default function ServerDetail() {
       setWebhookUrl(data.webhook_url || '');
 
       // Load whitelist/bans configs
-      setWhitelistContent(configData.whitelist || '');
-      setBansContent(configData.bans || '');
+      const wl = configData.whitelist || '';
+      const bn = configData.bans || '';
+      setWhitelistContent(wl);
+      setBansContent(bn);
+      setWhitelistArray(wl.split('\n').map(x => x.trim()).filter(Boolean));
+      setBansArray(bn.split('\n').map(x => x.trim()).filter(Boolean));
     } catch (err) {
       setError(err.message || 'Failed to retrieve server details.');
     } finally {
@@ -772,13 +795,83 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchPlayerHistory = async () => {
+  const fetchPlayerHistory = async (search = historySearchQuery, event = historyEventFilter) => {
     try {
-      const data = await apiRequest(`/servers/${id}/players/history`);
+      const queryParams = new URLSearchParams({
+        search: search,
+        event: event,
+        limit: 100
+      }).toString();
+      const data = await apiRequest(`/servers/${id}/players/history?${queryParams}`);
       setPlayerHistory(data || []);
     } catch (err) {
       console.error('Failed to fetch player connection history:', err);
     }
+  };
+
+  const fetchPlayerStats = async () => {
+    try {
+      setStatsLoading(true);
+      const data = await apiRequest(`/servers/${id}/players/stats`);
+      setPlayerStats(data || []);
+    } catch (err) {
+      console.error('Failed to fetch player statistics:', err);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+  const getAvatarStyle = (username) => {
+    let hash = 0;
+    for (let i = 0; i < username.length; i++) {
+      hash = username.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const h = Math.abs(hash) % 360;
+    return {
+      background: `linear-gradient(135deg, hsl(${h}, 70%, 45%), hsl(${(h + 40) % 360}, 75%, 35%))`,
+      color: '#ffffff',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 'bold',
+      fontSize: '16px',
+      width: '36px',
+      height: '36px',
+      borderRadius: '50%',
+      fontFamily: 'var(--font-heading)',
+      boxShadow: `0 4px 12px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.2)`,
+      textShadow: '0 1px 2px rgba(0, 0, 0, 0.5)',
+      userSelect: 'none'
+    };
+  };
+
+  const getSessionDurationStr = (player) => {
+    const lastJoin = playerHistory.find(h => h.player === player && h.event === 'join');
+    if (!lastJoin) return 'Just joined';
+    
+    const joinedMs = new Date(lastJoin.timestamp).getTime();
+    const diffMs = Date.now() - joinedMs;
+    if (diffMs < 0) return 'Just joined';
+    
+    const diffS = Math.floor(diffMs / 1000);
+    const h = Math.floor(diffS / 3600);
+    const m = Math.floor((diffS % 3600) / 60);
+    const s = diffS % 60;
+    
+    if (h > 0) return `${h}h ${m}m online`;
+    if (m > 0) return `${m}m online`;
+    return `${s}s online`;
+  };
+
+  const formatPlaytime = (ms) => {
+    if (!ms) return '0s';
+    const totalSecs = Math.floor(ms / 1000);
+    const hrs = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    const secs = totalSecs % 60;
+    
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
   };
 
   const handlePlayerCommand = async (commandString) => {
@@ -1364,10 +1457,13 @@ export default function ServerDetail() {
 
   // PLAYERS TAB SAVE
   const handleSavePlayers = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     setSavingPlayers(true);
     try {
       const configData = server.config_json ? JSON.parse(server.config_json) : {};
+      const wlString = whitelistArray.join('\n');
+      const bansString = bansArray.join('\n');
+      
       await apiRequest(`/servers/${id}`, {
         method: 'PATCH',
         body: {
@@ -1378,12 +1474,14 @@ export default function ServerDetail() {
           webhook_url: server.webhook_url,
           config_json: JSON.stringify({
             ...configData,
-            whitelist: whitelistContent,
-            bans: bansContent
+            whitelist: wlString,
+            bans: bansString
           })
         }
       });
-      alert('Whitelist and Bans permissions files synchronized successfully.');
+      setWhitelistContent(wlString);
+      setBansContent(bansString);
+      alert('Whitelist and Bans permissions synchronized successfully.');
       fetchServerDetails();
     } catch (err) {
       alert(err.message);
@@ -2486,156 +2584,192 @@ export default function ServerDetail() {
         {/* 5. PLAYERS TAB */}
         {activeTab === 'players' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            
             {/* Active Players HUD */}
             <div className="glass-panel animate-fade-in">
-              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px' }}>
-                Active Online Players
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px' }}>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                  Active Online Players
+                </h3>
+                <span className="badge badge-accent">
+                  {onlinePlayers.length} {onlinePlayers.length === 1 ? 'Player' : 'Players'} Online
+                </span>
+              </div>
+              
               {onlinePlayers.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '14px', padding: '16px 0' }}>
                   No players currently online. The panel polls the active Hytale console session every 90 seconds.
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px' }}>
-                  {onlinePlayers.map((player) => (
-                    <div 
-                      key={player} 
-                      style={{ 
-                        backgroundColor: 'var(--bg-panel-hover)', 
-                        border: '1px solid var(--border)', 
-                        borderRadius: '12px', 
-                        padding: '16px 20px', 
-                        fontSize: '14px', 
-                        display: 'flex', 
-                        flexDirection: 'column', 
-                        gap: '14px',
-                        minWidth: '280px',
-                        flex: '1 1 300px',
-                        boxShadow: 'var(--shadow-md)'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,0.05)', paddingBottom: '10px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span className="status-dot active"></span>
-                          <strong style={{ color: 'var(--text-main)', fontSize: '16px' }}>{player}</strong>
-                        </div>
-                        <span style={{ fontSize: '11px', color: 'var(--success)', textTransform: 'uppercase', fontWeight: '600', letterSpacing: '0.05em' }}>Online</span>
-                      </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '20px' }}>
+                  {onlinePlayers.map((player) => {
+                    const isWhitelisted = whitelistArray.includes(player);
+                    const isBanned = bansArray.includes(player);
+                    
+                    return (
+                      <div 
+                        key={player} 
+                        style={{ 
+                          backgroundColor: 'var(--bg-panel-hover)', 
+                          border: '1px solid var(--border)', 
+                          borderRadius: '16px', 
+                          padding: '20px', 
+                          fontSize: '14px', 
+                          display: 'flex', 
+                          flexDirection: 'column', 
+                          gap: '16px',
+                          minWidth: '310px',
+                          flex: '1 1 320px',
+                          boxShadow: 'var(--shadow-lg)',
+                          position: 'relative',
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {/* Header Details */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '12px' }}>
+                          <div style={getAvatarStyle(player)}>
+                            {player.charAt(0).toUpperCase()}
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <strong style={{ color: 'var(--text-main)', fontSize: '17px' }}>{player}</strong>
+                              <span className="status-dot active" style={{ width: '8px', height: '8px' }}></span>
+                            </div>
+                            <span style={{ fontSize: '11px', color: 'var(--success)', marginTop: '2px', fontFamily: 'var(--font-mono)' }}>
+                              {getSessionDurationStr(player)}
+                            </span>
+                          </div>
 
-                      {/* Command Buttons Grid */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                        <button 
-                          className="btn btn-secondary" 
-                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
-                          onClick={() => handlePlayerCommand(`op add ${player}`)}
-                          disabled={isViewer}
-                        >
-                          👑 OP Add
-                        </button>
-                        <button 
-                          className="btn btn-secondary" 
-                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
-                          onClick={() => handlePlayerCommand(`op remove ${player}`)}
-                          disabled={isViewer}
-                        >
-                          🛡️ OP Remove
-                        </button>
-                        <button 
-                          className="btn btn-secondary" 
-                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
-                          onClick={() => handlePlayerCommand(`heal ${player}`)}
-                          disabled={isViewer}
-                        >
-                          ❤️ Heal
-                        </button>
-                        <button 
-                          className="btn btn-danger" 
-                          style={{ padding: '6px 12px', fontSize: '12px', justifyContent: 'flex-start' }}
-                          onClick={async () => {
-                            if (await showConfirm(`Kick player ${player}?`, { title: 'Kick Player', confirmText: 'Kick', isDanger: true })) {
-                              handlePlayerCommand(`kick ${player}`);
-                            }
-                          }}
-                          disabled={isViewer}
-                        >
-                          🚪 Kick
-                        </button>
-                      </div>
-
-                      {/* Dropdowns / Complex Actions */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '10px' }}>
-                        {/* Gamemode Selector */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Game Mode:</span>
-                          <select 
-                            style={{ 
-                              backgroundColor: '#050608', 
-                              color: 'var(--text-main)', 
-                              border: '1px solid var(--border)', 
-                              borderRadius: '4px', 
-                              padding: '4px 8px', 
-                              fontSize: '11px',
-                              outline: 'none',
-                              cursor: isViewer ? 'not-allowed' : 'pointer'
-                            }}
-                            disabled={isViewer}
-                            onChange={(e) => {
-                              if (e.target.value) {
-                                handlePlayerCommand(`gamemode ${player} ${e.target.value}`);
-                                e.target.value = ''; // Reset selector
-                              }
-                            }}
-                          >
-                            <option value="">Select Mode...</option>
-                            <option value="creative">Creative</option>
-                            <option value="adventure">Adventure</option>
-                            <option value="survival">Survival</option>
-                            <option value="spectator">Spectator</option>
-                          </select>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-end' }}>
+                            {isWhitelisted && (
+                              <span className="badge badge-success" style={{ fontSize: '10px', padding: '2px 8px' }}>
+                                Whitelisted
+                              </span>
+                            )}
+                            {isBanned && (
+                              <span className="badge badge-error" style={{ fontSize: '10px', padding: '2px 8px' }}>
+                                Banned
+                              </span>
+                            )}
+                          </div>
                         </div>
 
-                        {/* Teleport Coordinates Input */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <input 
-                            id={`tp-coords-${player}`}
-                            type="text" 
-                            placeholder="x,y,z or Player" 
-                            style={{ 
-                              backgroundColor: '#050608', 
-                              color: 'var(--text-main)', 
-                              border: '1px solid var(--border)', 
-                              borderRadius: '4px', 
-                              padding: '4px 8px', 
-                              fontSize: '11px', 
-                              flex: '1',
-                              outline: 'none'
-                            }}
-                            disabled={isViewer}
-                          />
+                        {/* Direct Control Buttons */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                           <button 
-                            className="btn btn-primary" 
-                            style={{ padding: '4px 10px', fontSize: '11px' }}
-                            onClick={() => {
-                              const input = document.getElementById(`tp-coords-${player}`);
-                              const val = input ? input.value.trim() : '';
-                              if (!val) {
-                                alert('Please specify target player or coordinates (e.g. 100,50,-200)');
-                                return;
+                            className="btn btn-secondary" 
+                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            onClick={() => handlePlayerCommand(`op add ${player}`)}
+                            disabled={isViewer}
+                          >
+                            👑 Grant OP
+                          </button>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            onClick={() => handlePlayerCommand(`op remove ${player}`)}
+                            disabled={isViewer}
+                          >
+                            🛡️ De-OP
+                          </button>
+                          <button 
+                            className="btn btn-secondary" 
+                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            onClick={() => handlePlayerCommand(`heal ${player}`)}
+                            disabled={isViewer}
+                          >
+                            ❤️ Heal Player
+                          </button>
+                          <button 
+                            className="btn btn-danger" 
+                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            onClick={async () => {
+                              if (await showConfirm(`Kick player ${player}?`, { title: 'Kick Player', confirmText: 'Kick', isDanger: true })) {
+                                handlePlayerCommand(`kick ${player}`);
                               }
-                              const target = val.includes(',') ? val.split(',').map(c => c.trim()).join(' ') : val;
-                              handlePlayerCommand(`tp ${player} ${target}`);
                             }}
                             disabled={isViewer}
                           >
-                            ⚡ TP
+                            🚪 Kick Player
                           </button>
                         </div>
 
-                        {/* Ban Button */}
-                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                        {/* Interactive Dropdowns & Inputs */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', backgroundColor: 'rgba(0,0,0,0.15)', padding: '12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.02)' }}>
+                          {/* Gamemode Selector */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'space-between' }}>
+                            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Game Mode:</span>
+                            <select 
+                              style={{ 
+                                backgroundColor: '#050608', 
+                                color: 'var(--text-main)', 
+                                border: '1px solid var(--border)', 
+                                borderRadius: '6px', 
+                                padding: '6px 12px', 
+                                fontSize: '12px',
+                                outline: 'none',
+                                cursor: isViewer ? 'not-allowed' : 'pointer'
+                              }}
+                              disabled={isViewer}
+                              onChange={(e) => {
+                                if (e.target.value) {
+                                  handlePlayerCommand(`gamemode ${player} ${e.target.value}`);
+                                  e.target.value = '';
+                                }
+                              }}
+                            >
+                              <option value="">Select mode...</option>
+                              <option value="survival">Survival</option>
+                              <option value="creative">Creative</option>
+                              <option value="adventure">Adventure</option>
+                              <option value="spectator">Spectator</option>
+                            </select>
+                          </div>
+
+                          {/* TP Coordinates */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input 
+                              id={`tp-coords-${player}`}
+                              type="text" 
+                              placeholder="Coords (x,y,z) or player" 
+                              style={{ 
+                                backgroundColor: '#050608', 
+                                color: 'var(--text-main)', 
+                                border: '1px solid var(--border)', 
+                                borderRadius: '6px', 
+                                padding: '6px 10px', 
+                                fontSize: '12px', 
+                                flex: '1',
+                                outline: 'none'
+                              }}
+                              disabled={isViewer}
+                            />
+                            <button 
+                              className="btn btn-primary" 
+                              style={{ padding: '6px 12px', fontSize: '12px' }}
+                              onClick={() => {
+                                const input = document.getElementById(`tp-coords-${player}`);
+                                const val = input ? input.value.trim() : '';
+                                if (!val) {
+                                  alert('Please specify target player or coordinates (e.g. 100,50,-200)');
+                                  return;
+                                }
+                                const target = val.includes(',') ? val.split(',').map(c => c.trim()).join(' ') : val;
+                                handlePlayerCommand(`tp ${player} ${target}`);
+                              }}
+                              disabled={isViewer}
+                            >
+                              ⚡ Teleport
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Ban Button Row */}
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
                           <button 
-                            className="btn btn-danger" 
-                            style={{ padding: '4px 10px', fontSize: '11px', backgroundColor: 'transparent', borderColor: 'var(--error)', color: 'var(--error)' }}
+                            className="btn btn-secondary" 
+                            style={{ padding: '6px 12px', fontSize: '11px', borderColor: 'rgba(244, 63, 94, 0.3)', color: 'var(--error)' }}
                             onClick={async () => {
                               if (await showConfirm(`Ban player ${player} permanently?`, { title: 'Ban Player', confirmText: 'Ban', isDanger: true })) {
                                 handlePlayerCommand(`ban ${player}`);
@@ -2643,34 +2777,468 @@ export default function ServerDetail() {
                             }}
                             disabled={isViewer}
                           >
-                            🚫 Permanent Ban
+                            🚫 Ban Permanently
                           </button>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Access Permission Tag Editors */}
+            <div className="glass-panel animate-fade-in">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px' }}>
+                <div>
+                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                    Player Access Permissions
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', margin: 0 }}>
+                    Configure server Whitelist and Ban list rules instantly.
+                  </p>
+                </div>
+                <button 
+                  onClick={handleSavePlayers} 
+                  className="btn btn-primary" 
+                  disabled={savingPlayers || isViewer}
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                >
+                  {savingPlayers ? 'Syncing...' : '💾 Save Access Lists'}
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
+                
+                {/* 1. Whitelist Card Tag Manager */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                      Whitelist Wholesome List
+                    </span>
+                    <span className="badge badge-success" style={{ fontSize: '11px' }}>
+                      {whitelistArray.length} Players
+                    </span>
+                  </div>
+
+                  {/* Tag Input */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input 
+                      type="text"
+                      className="form-input"
+                      placeholder="Add whitelisted player name..."
+                      value={newWhitelistName}
+                      disabled={isViewer}
+                      onChange={(e) => setNewWhitelistName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newWhitelistName.trim();
+                          if (val && !whitelistArray.includes(val)) {
+                            setWhitelistArray([...whitelistArray, val]);
+                            setNewWhitelistName('');
+                          }
+                        }
+                      }}
+                      style={{ flex: 1, padding: '8px 12px', fontSize: '13px' }}
+                    />
+                    <button 
+                      type="button" 
+                      className="btn btn-primary"
+                      disabled={isViewer}
+                      onClick={() => {
+                        const val = newWhitelistName.trim();
+                        if (val && !whitelistArray.includes(val)) {
+                          setWhitelistArray([...whitelistArray, val]);
+                          setNewWhitelistName('');
+                        }
+                      }}
+                      style={{ padding: '8px 14px', fontSize: '13px' }}
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {/* Tags Flex wrap list */}
+                  <div style={{ 
+                    minHeight: '140px', 
+                    maxHeight: '220px', 
+                    overflowY: 'auto', 
+                    border: '1px dashed var(--border)', 
+                    borderRadius: '8px', 
+                    padding: '12px', 
+                    display: 'flex', 
+                    flexWrap: 'wrap', 
+                    alignContent: 'flex-start',
+                    gap: '8px',
+                    backgroundColor: 'rgba(0,0,0,0.1)'
+                  }}>
+                    {whitelistArray.length === 0 ? (
+                      <div style={{ color: 'var(--text-dark)', fontSize: '12px', margin: 'auto', textAlign: 'center' }}>
+                        No players currently whitelisted. Whitelist is idle.
+                      </div>
+                    ) : (
+                      whitelistArray.map((player) => (
+                        <div 
+                          key={player}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: 'var(--primary-glow)',
+                            border: '1px solid var(--primary)',
+                            borderRadius: '20px',
+                            padding: '4px 10px',
+                            color: 'var(--text-main)',
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          <span>{player}</span>
+                          <button
+                            type="button"
+                            disabled={isViewer}
+                            onClick={() => setWhitelistArray(whitelistArray.filter(p => p !== player))}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--text-muted)',
+                              cursor: isViewer ? 'not-allowed' : 'pointer',
+                              fontSize: '14px',
+                              padding: '0 2px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Ban Card Tag Manager */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', backgroundColor: 'rgba(255,255,255,0.01)', border: '1px solid var(--border)', borderRadius: '12px', padding: '20px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                      Permanent Blacklist list
+                    </span>
+                    <span className="badge badge-error" style={{ fontSize: '11px' }}>
+                      {bansArray.length} Players
+                    </span>
+                  </div>
+
+                  {/* Tag Input */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input 
+                      type="text"
+                      className="form-input"
+                      placeholder="Add banned player name..."
+                      value={newBanName}
+                      disabled={isViewer}
+                      onChange={(e) => setNewBanName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const val = newBanName.trim();
+                          if (val && !bansArray.includes(val)) {
+                            setBansArray([...bansArray, val]);
+                            setNewBanName('');
+                          }
+                        }
+                      }}
+                      style={{ flex: 1, padding: '8px 12px', fontSize: '13px' }}
+                    />
+                    <button 
+                      type="button" 
+                      className="btn btn-primary"
+                      disabled={isViewer}
+                      onClick={() => {
+                        const val = newBanName.trim();
+                        if (val && !bansArray.includes(val)) {
+                          setBansArray([...bansArray, val]);
+                          setNewBanName('');
+                        }
+                      }}
+                      style={{ padding: '8px 14px', fontSize: '13px' }}
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {/* Tags Flex wrap list */}
+                  <div style={{ 
+                    minHeight: '140px', 
+                    maxHeight: '220px', 
+                    overflowY: 'auto', 
+                    border: '1px dashed var(--border)', 
+                    borderRadius: '8px', 
+                    padding: '12px', 
+                    display: 'flex', 
+                    flexWrap: 'wrap', 
+                    alignContent: 'flex-start',
+                    gap: '8px',
+                    backgroundColor: 'rgba(0,0,0,0.1)'
+                  }}>
+                    {bansArray.length === 0 ? (
+                      <div style={{ color: 'var(--text-dark)', fontSize: '12px', margin: 'auto', textAlign: 'center' }}>
+                        No players currently banned. Ban lists are clear.
+                      </div>
+                    ) : (
+                      bansArray.map((player) => (
+                        <div 
+                          key={player}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            backgroundColor: 'rgba(244, 63, 94, 0.08)',
+                            border: '1px solid var(--error)',
+                            borderRadius: '20px',
+                            padding: '4px 10px',
+                            color: 'var(--text-main)',
+                            fontSize: '12px',
+                            fontWeight: '500'
+                          }}
+                        >
+                          <span>{player}</span>
+                          <button
+                            type="button"
+                            disabled={isViewer}
+                            onClick={() => setBansArray(bansArray.filter(p => p !== player))}
+                            style={{
+                              border: 'none',
+                              background: 'transparent',
+                              color: 'var(--text-muted)',
+                              cursor: isViewer ? 'not-allowed' : 'pointer',
+                              fontSize: '14px',
+                              padding: '0 2px',
+                              display: 'flex',
+                              alignItems: 'center'
+                            }}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            {/* 3. Player statistics dashboard */}
+            <div className="glass-panel animate-fade-in">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                    Aggregated Player Statistics
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', margin: 0 }}>
+                    Playtime records and connection stats calculated from server stdout history logs.
+                  </p>
+                </div>
+
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Search stats name..." 
+                    value={statsSearchQuery} 
+                    onChange={(e) => setStatsSearchQuery(e.target.value)}
+                    style={{ width: '220px', padding: '6px 12px', fontSize: '12px' }}
+                  />
+                  <button 
+                    className="btn btn-secondary" 
+                    onClick={fetchPlayerStats} 
+                    disabled={statsLoading}
+                    style={{ padding: '6px 12px', fontSize: '12px' }}
+                  >
+                    {statsLoading ? 'Scanning...' : '🔄 Recalculate Stats'}
+                  </button>
+                </div>
+              </div>
+
+              {statsLoading ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '14px', padding: '48px 0', textAlign: 'center' }}>
+                  Reconstructing player session timelines from database console logs...
+                </div>
+              ) : playerStats.length === 0 ? (
+                <div style={{ color: 'var(--text-dark)', fontSize: '14px', padding: '48px 0', textAlign: 'center' }}>
+                  No player sessions registered yet. Connect to the server to establish log stats.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr 1.5fr 1fr', padding: '10px 12px', color: 'var(--text-muted)', fontSize: '12px', borderBottom: '1px solid var(--border)', fontWeight: '600' }}>
+                    <div>Player Identity</div>
+                    <div>Total Playtime</div>
+                    <div>Sessions count</div>
+                    <div>Last Active Date</div>
+                    <div style={{ textAlign: 'right' }}>Permission Actions</div>
+                  </div>
+
+                  {playerStats
+                    .filter(p => !statsSearchQuery || p.username.toLowerCase().includes(statsSearchQuery.toLowerCase()))
+                    .map((p) => {
+                      const isWhitelisted = whitelistArray.includes(p.username);
+                      const isBanned = bansArray.includes(p.username);
+
+                      return (
+                        <div 
+                          key={p.username} 
+                          style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: '1.5fr 1fr 1fr 1.5fr 1fr', 
+                            padding: '12px', 
+                            borderRadius: '8px', 
+                            fontSize: '13px', 
+                            alignItems: 'center' 
+                          }}
+                          className="glass-card"
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={getAvatarStyle(p.username)}>
+                              {p.username.charAt(0).toUpperCase()}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                              <strong style={{ color: 'var(--text-main)', fontSize: '14px' }}>{p.username}</strong>
+                              <span style={{ fontSize: '10px', color: p.isOnline ? 'var(--success)' : 'var(--text-dark)' }}>
+                                {p.isOnline ? 'Active Online' : 'Offline'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                            {formatPlaytime(p.playtimeMs)}
+                          </div>
+
+                          <div style={{ color: 'var(--text-muted)' }}>
+                            {p.sessionCount} connections
+                          </div>
+
+                          <div style={{ color: 'var(--text-dark)', fontSize: '12px' }}>
+                            {new Date(p.lastActive).toLocaleString()}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ 
+                                padding: '4px 10px', 
+                                fontSize: '11px', 
+                                borderColor: isWhitelisted ? 'var(--primary)' : 'rgba(255,255,255,0.08)',
+                                color: isWhitelisted ? 'var(--primary)' : 'var(--text-muted)'
+                              }}
+                              disabled={isViewer}
+                              onClick={() => {
+                                if (isWhitelisted) {
+                                  setWhitelistArray(whitelistArray.filter(x => x !== p.username));
+                                } else {
+                                  setWhitelistArray([...whitelistArray, p.username]);
+                                }
+                              }}
+                            >
+                              {isWhitelisted ? '✔ Whitelisted' : 'Whitelist'}
+                            </button>
+                            
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ 
+                                padding: '4px 10px', 
+                                fontSize: '11px', 
+                                borderColor: isBanned ? 'var(--error)' : 'rgba(255,255,255,0.08)',
+                                color: isBanned ? 'var(--error)' : 'var(--text-muted)'
+                              }}
+                              disabled={isViewer}
+                              onClick={() => {
+                                if (isBanned) {
+                                  setBansArray(bansArray.filter(x => x !== p.username));
+                                } else {
+                                  setBansArray([...bansArray, p.username]);
+                                }
+                              }}
+                            >
+                              {isBanned ? '🚫 Banned' : 'Ban'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               )}
             </div>
 
             {/* Player Connection History Log */}
             <div className="glass-panel animate-fade-in" style={{ marginTop: '-16px' }}>
-              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span>Recent Connection History</span>
-                <button 
-                  className="btn btn-secondary" 
-                  style={{ padding: '4px 12px', fontSize: '12px' }} 
-                  onClick={fetchPlayerHistory}
-                >
-                  🔄 Refresh History
-                </button>
-              </h3>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '20px', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                    Recent Connection History
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px', margin: 0 }}>
+                    Historical logs and records of connection sessions.
+                  </p>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                  <input 
+                    type="text" 
+                    className="form-input" 
+                    placeholder="Search logs player..." 
+                    value={historySearchQuery} 
+                    onChange={(e) => {
+                      setHistorySearchQuery(e.target.value);
+                      fetchPlayerHistory(e.target.value, historyEventFilter);
+                    }}
+                    style={{ width: '200px', padding: '6px 12px', fontSize: '12px' }}
+                  />
+
+                  <div style={{ display: 'flex', border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden', height: '30px' }}>
+                    {['all', 'join', 'leave'].map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => {
+                          setHistoryEventFilter(t);
+                          fetchPlayerHistory(historySearchQuery, t);
+                        }}
+                        style={{
+                          backgroundColor: historyEventFilter === t ? 'rgba(255,255,255,0.06)' : 'transparent',
+                          color: historyEventFilter === t ? 'var(--primary)' : 'var(--text-muted)',
+                          border: 'none',
+                          padding: '0 12px',
+                          fontSize: '11px',
+                          fontWeight: '600',
+                          textTransform: 'uppercase',
+                          cursor: 'pointer',
+                          outline: 'none'
+                        }}
+                      >
+                        {t === 'all' ? 'All' : t === 'join' ? 'Joins' : 'Leaves'}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button 
+                    className="btn btn-secondary" 
+                    style={{ padding: '6px 12px', fontSize: '12px' }} 
+                    onClick={() => fetchPlayerHistory(historySearchQuery, historyEventFilter)}
+                  >
+                    🔄 Refresh
+                  </button>
+                </div>
+              </div>
+
               {playerHistory.length === 0 ? (
-                <div style={{ color: 'var(--text-muted)', fontSize: '14px' }}>
+                <div style={{ color: 'var(--text-muted)', fontSize: '14px', padding: '16px 0' }}>
                   No connection events recorded yet. Connect to the server to populate logs.
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '350px', overflowY: 'auto', paddingRight: '8px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '380px', overflowY: 'auto', paddingRight: '8px' }}>
                   {playerHistory.map((item, idx) => (
                     <div 
                       key={idx} 
@@ -2708,7 +3276,7 @@ export default function ServerDetail() {
                         {item.event === 'leave' && (
                           <button 
                             className="btn btn-secondary" 
-                            style={{ padding: '2px 8px', fontSize: '10px' }}
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
                             onClick={async () => {
                               if (await showConfirm(`Ban player ${item.player} permanently?`, { title: 'Ban Player', confirmText: 'Ban', isDanger: true })) {
                                 handlePlayerCommand(`ban ${item.player}`);
@@ -2722,7 +3290,7 @@ export default function ServerDetail() {
                         {item.event === 'join' && (
                           <button 
                             className="btn btn-secondary" 
-                            style={{ padding: '2px 8px', fontSize: '10px' }}
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
                             onClick={async () => {
                               if (await showConfirm(`Kick player ${item.player}?`, { title: 'Kick Player', confirmText: 'Kick', isDanger: true })) {
                                 handlePlayerCommand(`kick ${item.player}`);
@@ -2738,69 +3306,6 @@ export default function ServerDetail() {
                   ))}
                 </div>
               )}
-            </div>
-
-            {/* Whitelist and Bans Editors */}
-            <div className="glass-panel animate-fade-in" style={{ marginTop: '-16px' }}>
-              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '24px' }}>
-                Player Access Permissions
-              </h3>
-
-              <form onSubmit={handleSavePlayers}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px', marginBottom: '24px' }}>
-                  <div className="form-group">
-                    <label className="form-label">Whitelist Configuration</label>
-                    <span style={{ fontSize: '12px', color: 'var(--text-dark)', marginBottom: '4px' }}>Enter whitelisted player names (one per line)</span>
-                    <textarea
-                      value={whitelistContent}
-                      onChange={(e) => setWhitelistContent(e.target.value)}
-                      disabled={isViewer}
-                      style={{
-                        height: '250px',
-                        backgroundColor: '#050608',
-                        color: 'var(--text-main)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        padding: '12px',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '13px',
-                        resize: 'none',
-                        outline: 'none',
-                        cursor: isViewer ? 'not-allowed' : 'default'
-                      }}
-                    />
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Banned Players list</label>
-                    <span style={{ fontSize: '12px', color: 'var(--text-dark)', marginBottom: '4px' }}>Enter banned player names (one per line)</span>
-                    <textarea
-                      value={bansContent}
-                      onChange={(e) => setBansContent(e.target.value)}
-                      disabled={isViewer}
-                      style={{
-                        height: '250px',
-                        backgroundColor: '#050608',
-                        color: 'var(--text-main)',
-                        border: '1px solid var(--border)',
-                        borderRadius: '8px',
-                        padding: '12px',
-                        fontFamily: 'var(--font-mono)',
-                        fontSize: '13px',
-                        resize: 'none',
-                        outline: 'none',
-                        cursor: isViewer ? 'not-allowed' : 'default'
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-                  <button type="submit" className="btn btn-primary" disabled={savingPlayers || isViewer}>
-                    {savingPlayers ? 'Syncing...' : 'Save Permissions'}
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         )}

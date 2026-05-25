@@ -423,6 +423,9 @@ module.exports = function(db) {
   // GET /api/servers/:id/players/history (retrieve player join/leave history)
   router.get('/:id/players/history', requireServerAccess('viewer', db), (req, res, next) => {
     const id = parseInt(req.params.id, 10);
+    const limit = parseInt(req.query.limit || '100', 10);
+    const search = req.query.search ? req.query.search.trim().toLowerCase() : '';
+    const eventType = req.query.event || 'all';
     try {
       if (isNaN(id)) throw new HttpError(400, 'Invalid server ID.');
       
@@ -440,32 +443,134 @@ module.exports = function(db) {
             line LIKE '%logged out%'
           )
         ORDER BY id DESC
-        LIMIT 50
+        LIMIT 500
       `).all(id);
 
       const history = [];
       for (const row of rows) {
+        let player = null;
+        let event = null;
+
         const joinMatch = row.line.match(/\[?(\w+)\]? (?:joined the game|connected|logged in)/i);
         if (joinMatch) {
-          history.push({
-            player: joinMatch[1],
-            event: 'join',
-            timestamp: row.created_at,
-          });
-          continue;
+          player = joinMatch[1];
+          event = 'join';
+        } else {
+          const leaveMatch = row.line.match(/\[?(\w+)\]? (?:left the game|disconnected|logged out)/i);
+          if (leaveMatch) {
+            player = leaveMatch[1];
+            event = 'leave';
+          }
         }
 
-        const leaveMatch = row.line.match(/\[?(\w+)\]? (?:left the game|disconnected|logged out)/i);
-        if (leaveMatch) {
+        if (player && event) {
+          if (search && !player.toLowerCase().includes(search)) {
+            continue;
+          }
+          if (eventType !== 'all' && event !== eventType) {
+            continue;
+          }
           history.push({
-            player: leaveMatch[1],
-            event: 'leave',
+            player,
+            event,
             timestamp: row.created_at,
           });
         }
       }
 
-      res.json(history);
+      res.json(history.slice(0, limit));
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/servers/:id/players/stats (retrieve aggregated player statistics)
+  router.get('/:id/players/stats', requireServerAccess('viewer', db), (req, res, next) => {
+    const id = parseInt(req.params.id, 10);
+    try {
+      if (isNaN(id)) throw new HttpError(400, 'Invalid server ID.');
+      
+      const rows = db.prepare(`
+        SELECT line, created_at
+        FROM server_logs
+        WHERE server_id = ?
+          AND stream = 'stdout'
+          AND (
+            line LIKE '%joined the game%' OR
+            line LIKE '%connected%' OR
+            line LIKE '%logged in%' OR
+            line LIKE '%left the game%' OR
+            line LIKE '%disconnected%' OR
+            line LIKE '%logged out%'
+          )
+        ORDER BY id ASC
+      `).all(id);
+
+      const statsMap = new Map();
+      for (const row of rows) {
+        const timestamp = new Date(row.created_at).getTime();
+        
+        const joinMatch = row.line.match(/\[?(\w+)\]? (?:joined the game|connected|logged in)/i);
+        if (joinMatch) {
+          const username = joinMatch[1];
+          if (!statsMap.has(username)) {
+            statsMap.set(username, {
+              username,
+              playtimeMs: 0,
+              sessionCount: 0,
+              lastActive: row.created_at,
+              lastJoinTime: null
+            });
+          }
+          const pData = statsMap.get(username);
+          pData.sessionCount += 1;
+          pData.lastJoinTime = timestamp;
+          pData.lastActive = row.created_at;
+          continue;
+        }
+
+        const leaveMatch = row.line.match(/\[?(\w+)\]? (?:left the game|disconnected|logged out)/i);
+        if (leaveMatch) {
+          const username = leaveMatch[1];
+          if (!statsMap.has(username)) {
+            statsMap.set(username, {
+              username,
+              playtimeMs: 0,
+              sessionCount: 0,
+              lastActive: row.created_at,
+              lastJoinTime: null
+            });
+          }
+          const pData = statsMap.get(username);
+          if (pData.lastJoinTime) {
+            pData.playtimeMs += Math.max(0, timestamp - pData.lastJoinTime);
+            pData.lastJoinTime = null;
+          }
+          pData.lastActive = row.created_at;
+        }
+      }
+
+      const currentOnline = getOnlinePlayers(id);
+      const nowMs = Date.now();
+      for (const username of currentOnline) {
+        if (statsMap.has(username)) {
+          const pData = statsMap.get(username);
+          if (pData.lastJoinTime) {
+            pData.playtimeMs += Math.max(0, nowMs - pData.lastJoinTime);
+            pData.lastJoinTime = null;
+          }
+        }
+      }
+
+      const stats = Array.from(statsMap.values()).map(p => ({
+        username: p.username,
+        playtimeMs: p.playtimeMs,
+        sessionCount: p.sessionCount,
+        lastActive: p.lastActive,
+        isOnline: currentOnline.includes(p.username)
+      }));
+
+      res.json(stats);
     } catch (err) {
       next(err);
     }
