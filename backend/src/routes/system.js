@@ -276,9 +276,13 @@ module.exports = function(db) {
       const user = db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
       if (!user) throw new HttpError(404, 'User not found.');
 
-      const transaction = db.transaction(async () => {
-        if (password) {
-          const hash = await bcrypt.hash(password, config.bcryptCost);
+      let hash = null;
+      if (password) {
+        hash = await bcrypt.hash(password, config.bcryptCost);
+      }
+
+      const transaction = db.transaction(() => {
+        if (hash) {
           db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, userId);
         }
         if (role) {
@@ -290,7 +294,8 @@ module.exports = function(db) {
         
         if (Array.isArray(serverIds)) {
           db.prepare('DELETE FROM user_servers WHERE user_id = ?').run(userId);
-          if (role !== 'admin') {
+          const currentRole = role || user.role;
+          if (currentRole !== 'admin') {
             const insertMapping = db.prepare('INSERT INTO user_servers (user_id, server_id) VALUES (?, ?)');
             for (const sId of serverIds) {
               insertMapping.run(userId, sId);
@@ -299,7 +304,7 @@ module.exports = function(db) {
         }
       });
 
-      await transaction();
+      transaction();
 
       db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
         .run(req.user.sub, 'update-user', `user:${userId}`, `Updated user details`, req.ip);
