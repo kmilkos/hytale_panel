@@ -2,6 +2,7 @@ const { spawn } = require('child_process');
 const readline = require('readline');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const EventEmitter = require('events');
 const config = require('../config');
 const logger = require('../utils/logger');
@@ -458,6 +459,74 @@ function getProcessMetrics(pid) {
   });
 }
 
+let lastCpuTimes = null;
+
+function getHostCpuUsage() {
+  const cpus = os.cpus();
+  if (!cpus || cpus.length === 0) return 0;
+  
+  let user = 0, nice = 0, sys = 0, idle = 0, irq = 0;
+  for (const cpu of cpus) {
+    user += cpu.times.user;
+    nice += cpu.times.nice;
+    sys += cpu.times.sys;
+    idle += cpu.times.idle;
+    irq += cpu.times.irq;
+  }
+  
+  const total = user + nice + sys + idle + irq;
+  
+  if (!lastCpuTimes) {
+    lastCpuTimes = { total, idle };
+    return 0;
+  }
+  
+  const totalDiff = total - lastCpuTimes.total;
+  const idleDiff = idle - lastCpuTimes.idle;
+  
+  lastCpuTimes = { total, idle };
+  
+  if (totalDiff === 0) return 0;
+  return Math.min(100, Math.max(0, Math.round((1 - idleDiff / totalDiff) * 100)));
+}
+
+function getDiskUsage() {
+  return new Promise((resolve) => {
+    const isWin = process.platform === 'win32';
+    if (isWin) {
+      exec('powershell -Command "Get-Volume -DriveLetter ((Get-Location).Path.Substring(0,1)) | Select-Object Size, SizeRemaining | ConvertTo-Json"', (err, stdout) => {
+        if (err || !stdout) return resolve({ total: 0, free: 0, used: 0 });
+        try {
+          const data = JSON.parse(stdout.trim());
+          const total = data.Size || 0;
+          const free = data.SizeRemaining || 0;
+          const used = total - free;
+          resolve({ total, free, used });
+        } catch (_) {
+          resolve({ total: 0, free: 0, used: 0 });
+        }
+      });
+    } else {
+      exec('df -B1 .', (err, stdout) => {
+        if (err || !stdout) return resolve({ total: 0, free: 0, used: 0 });
+        try {
+          const lines = stdout.trim().split('\n');
+          if (lines.length >= 2) {
+            const parts = lines[1].split(/\s+/).filter(Boolean);
+            if (parts.length >= 4) {
+              const total = parseInt(parts[1], 10) || 0;
+              const used = parseInt(parts[2], 10) || 0;
+              const free = parseInt(parts[3], 10) || 0;
+              return resolve({ total, free, used });
+            }
+          }
+        } catch (_) {}
+        resolve({ total: 0, free: 0, used: 0 });
+      });
+    }
+  });
+}
+
 function matchCronField(field, value) {
   if (field === '*') return true;
   
@@ -613,8 +682,24 @@ function startScheduler(db) {
         }
       }
 
+      // Collect and save system-wide host metrics
+      try {
+        const hostCpu = getHostCpuUsage();
+        const totalMem = os.totalmem();
+        const freeMem = os.freemem();
+        const usedMem = totalMem - freeMem;
+        const disk = await getDiskUsage();
+        const activeServers = activeProcesses.size;
+
+        db.prepare('INSERT INTO system_metrics (cpu_percentage, ram_bytes, disk_bytes, active_servers) VALUES (?, ?, ?, ?)')
+          .run(hostCpu, usedMem, disk.used, activeServers);
+      } catch (err) {
+        logger.error('Failed to collect system metrics', err);
+      }
+
       // 4. Metric Pruning logs (Prune logs older than 24 hours)
       db.prepare("DELETE FROM server_metrics WHERE recorded_at < datetime('now', '-24 hours')").run();
+      db.prepare("DELETE FROM system_metrics WHERE recorded_at < datetime('now', '-24 hours')").run();
 
     } catch (err) {
       logger.error('Error running background scheduler cycle', err);
@@ -1147,6 +1232,7 @@ module.exports = {
   cacheInstaller,
   installServerFiles,
   classifyConsoleIssue,
+  getDiskUsage,
 };
 // Java 25 reload trigger comment
 

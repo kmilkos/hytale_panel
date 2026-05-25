@@ -1161,9 +1161,11 @@ export default function ServerDetail() {
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '4px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '4px' }}>
               <Link to="/" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '13px' }}>&larr; Dashboard</Link>
-              <span className={`badge ${server.status === 'running' ? 'badge-success' : server.status === 'stopped' ? 'badge-secondary' : 'badge-warning'}`}>
+              <Link to="/metrics" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '13px' }}>System Metrics</Link>
+              <span style={{ color: 'var(--text-dark)', fontSize: '11px' }}>|</span>
+              <span className={`badge ${server.status === 'running' ? 'badge-success' : server.status === 'stopped' ? 'badge-secondary' : server.status === 'uninstalled' ? 'badge-secondary' : 'badge-warning'}`}>
                 <span className={`status-dot ${server.status === 'running' ? 'active' : server.status === 'stopped' ? 'stopped' : 'warning'}`}></span>
                 {server.status}
               </span>

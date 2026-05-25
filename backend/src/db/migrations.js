@@ -184,6 +184,22 @@ const migrations = [
         CREATE INDEX IF NOT EXISTS idx_server_metrics_server_id_recorded ON server_metrics(server_id, recorded_at);
       `);
     }
+  },
+  {
+    name: '003_system_metrics',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS system_metrics (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          cpu_percentage REAL NOT NULL,
+          ram_bytes INTEGER NOT NULL,
+          disk_bytes INTEGER NOT NULL,
+          active_servers INTEGER NOT NULL DEFAULT 0,
+          recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_system_metrics_recorded ON system_metrics(recorded_at);
+      `);
+    }
   }
 ];
 

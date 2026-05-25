@@ -112,6 +112,7 @@ export default function Dashboard() {
           </h1>
           <nav style={{ display: 'flex', gap: '16px' }}>
             <Link to="/" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Dashboard</Link>
+            <Link to="/metrics" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>System Metrics</Link>
             <Link to="/settings" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Settings</Link>
           </nav>
         </div>

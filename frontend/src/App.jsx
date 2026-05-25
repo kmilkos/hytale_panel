@@ -4,6 +4,7 @@ import Login from './views/Login';
 import Dashboard from './views/Dashboard';
 import ServerDetail from './views/ServerDetail';
 import SystemSettings from './views/SystemSettings';
+import SystemMetrics from './views/SystemMetrics';
 import { getUser } from './utils/api';
 
 // Route protection component
@@ -41,6 +42,15 @@ function App() {
           element={
             <PrivateRoute>
               <SystemSettings />
+            </PrivateRoute>
+          } 
+        />
+
+        <Route 
+          path="/metrics" 
+          element={
+            <PrivateRoute>
+              <SystemMetrics />
             </PrivateRoute>
           } 
         />

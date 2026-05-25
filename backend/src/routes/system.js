@@ -9,6 +9,7 @@ const {
   isInstallerCached,
   getInstallerDownloadState,
   cacheInstaller,
+  getDiskUsage,
 } = require('../services/serverService');
 
 module.exports = function(db) {
@@ -18,7 +19,7 @@ module.exports = function(db) {
   router.use(requireAuth);
 
   // GET /api/system/stats - Server machine status check
-  router.get('/stats', (req, res, next) => {
+  router.get('/stats', async (req, res, next) => {
     try {
       const uptime = os.uptime();
       const totalMem = os.totalmem();
@@ -26,22 +27,59 @@ module.exports = function(db) {
       const usedMem = totalMem - freeMem;
       const cpus = os.cpus();
       const loadAvg = os.loadavg(); // Returns load avg for 1, 5, 15 minutes (Unix only)
+      const disk = await getDiskUsage();
+
+      // Fetch active Hytale server performance snapshots
+      const runningServers = db.prepare("SELECT id, name, slug, port FROM servers WHERE status = 'running'").all();
+      const getLatestMetric = db.prepare("SELECT cpu_percentage, ram_bytes FROM server_metrics WHERE server_id = ? ORDER BY id DESC LIMIT 1");
+      
+      const activeInstances = [];
+      for (const srv of runningServers) {
+        const metric = getLatestMetric.get(srv.id);
+        activeInstances.push({
+          id: srv.id,
+          name: srv.name,
+          slug: srv.slug,
+          port: srv.port,
+          cpu: metric ? metric.cpu_percentage : 0,
+          ram: metric ? metric.ram_bytes : 0
+        });
+      }
 
       res.json({
         platform: os.platform(),
         arch: os.arch(),
         cpuModel: cpus[0]?.model || 'Unknown',
         cpuCores: cpus.length,
+        cpus: cpus.map((c, i) => ({ id: i, model: c.model, speed: c.speed, times: c.times })),
         memory: {
           total: totalMem,
           free: freeMem,
           used: usedMem,
           percentage: totalMem > 0 ? Math.round((usedMem / totalMem) * 100) : 0,
         },
+        disk,
         uptime: Math.round(uptime),
         nodeVersion: process.version,
         loadAverage: loadAvg,
+        activeInstances
       });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/system/metrics - Retrieve historical host metrics
+  router.get('/metrics', (req, res, next) => {
+    const limit = parseInt(req.query.limit || '120', 10);
+    try {
+      const metrics = db.prepare(`
+        SELECT cpu_percentage, ram_bytes, disk_bytes, active_servers, recorded_at
+        FROM system_metrics
+        ORDER BY id DESC
+        LIMIT ?
+      `).all(limit);
+      res.json(metrics.reverse());
     } catch (err) {
       next(err);
     }
