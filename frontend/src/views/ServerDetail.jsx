@@ -22,6 +22,144 @@ export default function ServerDetail() {
   const [schedCron, setSchedCron] = useState('* * * * *');
   const [schedAction, setSchedAction] = useState('restart');
   const [schedPayload, setSchedPayload] = useState('');
+
+  // Interactive Schedules Pickers States
+  const [schedModalMode, setSchedModalMode] = useState('simple'); // 'simple' | 'advanced'
+  const [simpleSchedFreq, setSimpleSchedFreq] = useState('daily'); // 'hourly' | 'everyXHours' | 'daily' | 'weekly' | 'interval'
+  const [simpleSchedMinute, setSimpleSchedMinute] = useState(0);
+  const [simpleSchedHourStep, setSimpleSchedHourStep] = useState(12);
+  const [simpleSchedDailyTime, setSimpleSchedDailyTime] = useState('04:00');
+  const [simpleSchedWeeklyDay, setSimpleSchedWeeklyDay] = useState(1); // 1 = Monday
+  const [simpleSchedWeeklyTime, setSimpleSchedWeeklyTime] = useState('04:00');
+  const [simpleSchedIntervalMin, setSimpleSchedIntervalMin] = useState(15);
+
+  // Live crontab explainer logic
+  const explainCron = (cron) => {
+    if (!cron) return 'Please specify a cron expression.';
+    const fields = cron.trim().split(/\s+/);
+    if (fields.length !== 5) return 'Invalid cron expression. Requires exactly 5 fields.';
+    
+    const [min, hour, dom, month, dow] = fields;
+    
+    const parseField = (field) => {
+      if (field === '*') return { type: 'any' };
+      if (field.startsWith('*/')) {
+        const step = parseInt(field.split('/')[1], 10);
+        return { type: 'step', step };
+      }
+      if (field.includes(',')) {
+        return { type: 'list', values: field.split(',') };
+      }
+      if (field.includes('-')) {
+        const [start, end] = field.split('-');
+        return { type: 'range', start: parseInt(start, 10), end: parseInt(end, 10) };
+      }
+      const val = parseInt(field, 10);
+      return { type: 'value', value: val };
+    };
+
+    const parsedMin = parseField(min);
+    const parsedHour = parseField(hour);
+    const parsedDom = parseField(dom);
+    const parsedMonth = parseField(month);
+    const parsedDow = parseField(dow);
+
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+    // Case 1: Every minute
+    if (min === '*' && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+      return 'Runs every single minute.';
+    }
+
+    // Case 2: Every X minutes
+    if (parsedMin.type === 'step' && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+      return `Runs every ${parsedMin.step} minutes.`;
+    }
+
+    // Case 3: Every hour at minute Y
+    if (parsedMin.type === 'value' && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+      const padMin = String(parsedMin.value).padStart(2, '0');
+      return `Runs every hour at minute ${padMin}.`;
+    }
+
+    // Case 4: Every X hours at minute Y
+    if (parsedMin.type === 'value' && parsedHour.type === 'step' && dom === '*' && month === '*' && dow === '*') {
+      const padMin = String(parsedMin.value).padStart(2, '0');
+      return `Runs every ${parsedHour.step} hours at minute ${padMin}.`;
+    }
+
+    // Case 5: Daily at HH:MM
+    if (parsedMin.type === 'value' && parsedHour.type === 'value' && dom === '*' && month === '*' && dow === '*') {
+      const hh = String(parsedHour.value).padStart(2, '0');
+      const mm = String(parsedMin.value).padStart(2, '0');
+      return `Runs daily at ${hh}:${mm}.`;
+    }
+
+    // Case 6: Weekly on DayOfWeek at HH:MM
+    if (parsedMin.type === 'value' && parsedHour.type === 'value' && dom === '*' && month === '*' && parsedDow.type === 'value') {
+      const hh = String(parsedHour.value).padStart(2, '0');
+      const mm = String(parsedMin.value).padStart(2, '0');
+      const day = daysOfWeek[parsedDow.value] || `Day ${parsedDow.value}`;
+      return `Runs weekly on ${day} at ${hh}:${mm}.`;
+    }
+
+    // Case 7: Basic generic representation for custom expressions
+    let desc = 'Runs at schedule: ';
+    if (min === '*') desc += 'every minute';
+    else if (parsedMin.type === 'step') desc += `every ${parsedMin.step} minutes`;
+    else desc += `at minute ${min}`;
+
+    if (hour === '*') desc += ', every hour';
+    else if (parsedHour.type === 'step') desc += `, every ${parsedHour.step} hours`;
+    else desc += `, at hour ${hour}`;
+
+    if (dom !== '*') desc += `, on day of month ${dom}`;
+    if (month !== '*') desc += `, in month ${month}`;
+    if (dow !== '*') {
+      const dayNames = dow.split(',').map(d => {
+        const dNum = parseInt(d, 10);
+        return daysOfWeek[dNum] || `Day ${d}`;
+      }).join(', ');
+      desc += `, on ${dayNames}`;
+    }
+    
+    return desc + '.';
+  };
+
+  // Compile Simple Picker states to a valid 5-field cron string
+  useEffect(() => {
+    if (schedModalMode !== 'simple') return;
+
+    let expression = '* * * * *';
+    if (simpleSchedFreq === 'hourly') {
+      expression = `${simpleSchedMinute} * * * *`;
+    } else if (simpleSchedFreq === 'everyXHours') {
+      expression = `${simpleSchedMinute} */${simpleSchedHourStep} * * *`;
+    } else if (simpleSchedFreq === 'daily') {
+      const [h, m] = simpleSchedDailyTime.split(':');
+      const minVal = parseInt(m, 10) || 0;
+      const hourVal = parseInt(h, 10) || 0;
+      expression = `${minVal} ${hourVal} * * *`;
+    } else if (simpleSchedFreq === 'weekly') {
+      const [h, m] = simpleSchedWeeklyTime.split(':');
+      const minVal = parseInt(m, 10) || 0;
+      const hourVal = parseInt(h, 10) || 0;
+      expression = `${minVal} ${hourVal} * * ${simpleSchedWeeklyDay}`;
+    } else if (simpleSchedFreq === 'interval') {
+      expression = `*/${simpleSchedIntervalMin} * * * *`;
+    }
+
+    setSchedCron(expression);
+  }, [
+    schedModalMode,
+    simpleSchedFreq,
+    simpleSchedMinute,
+    simpleSchedHourStep,
+    simpleSchedDailyTime,
+    simpleSchedWeeklyDay,
+    simpleSchedWeeklyTime,
+    simpleSchedIntervalMin
+  ]);
   
   // Tab Navigation State: 'console' | 'files' | 'mods' | 'backups' | 'schedules' | 'players' | 'config'
   const [activeTab, setActiveTab] = useState('console');
@@ -712,6 +850,110 @@ export default function ServerDetail() {
     }
   };
 
+  const openCreateScheduleModal = () => {
+    setEditingSchedule(null);
+    setSchedName('');
+    setSchedCron('0 4 * * *'); // Amber default: daily at 4:00 AM
+    setSchedAction('restart');
+    setSchedPayload('');
+    
+    // Reset simple mode states
+    setSchedModalMode('simple');
+    setSimpleSchedFreq('daily');
+    setSimpleSchedDailyTime('04:00');
+    setSimpleSchedMinute(0);
+    setSimpleSchedHourStep(12);
+    setSimpleSchedWeeklyDay(1);
+    setSimpleSchedWeeklyTime('04:00');
+    setSimpleSchedIntervalMin(15);
+    
+    setShowScheduleModal(true);
+  };
+
+  const openEditScheduleModal = (sched) => {
+    setEditingSchedule(sched);
+    setSchedName(sched.name);
+    setSchedAction(sched.action);
+    setSchedPayload(sched.action_payload || '');
+    
+    const cron = sched.cron_expression.trim();
+    setSchedCron(cron);
+
+    // Try parsing the cron expression to see if it fits a simple preset
+    const fields = cron.split(/\s+/);
+    let matched = false;
+
+    if (fields.length === 5) {
+      const [min, hour, dom, month, dow] = fields;
+      
+      // 1. Interval: */X * * * *
+      if (min.startsWith('*/') && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+        const interval = parseInt(min.split('/')[1], 10);
+        if ([5, 10, 15, 30].includes(interval)) {
+          setSchedModalMode('simple');
+          setSimpleSchedFreq('interval');
+          setSimpleSchedIntervalMin(interval);
+          matched = true;
+        }
+      }
+      
+      // 2. Hourly: X * * * *
+      if (!matched && !isNaN(min) && hour === '*' && dom === '*' && month === '*' && dow === '*') {
+        const minuteVal = parseInt(min, 10);
+        if (minuteVal >= 0 && minuteVal <= 59) {
+          setSchedModalMode('simple');
+          setSimpleSchedFreq('hourly');
+          setSimpleSchedMinute(minuteVal);
+          matched = true;
+        }
+      }
+
+      // 3. Every X Hours: M */H * * *
+      if (!matched && !isNaN(min) && hour.startsWith('*/') && dom === '*' && month === '*' && dow === '*') {
+        const minuteVal = parseInt(min, 10);
+        const hourStep = parseInt(hour.split('/')[1], 10);
+        if (minuteVal >= 0 && minuteVal <= 59 && [2, 3, 4, 6, 8, 12].includes(hourStep)) {
+          setSchedModalMode('simple');
+          setSimpleSchedFreq('everyXHours');
+          setSimpleSchedMinute(minuteVal);
+          setSimpleSchedHourStep(hourStep);
+          matched = true;
+        }
+      }
+
+      // 4. Daily: M H * * *
+      if (!matched && !isNaN(min) && !isNaN(hour) && dom === '*' && month === '*' && dow === '*') {
+        const minVal = parseInt(min, 10);
+        const hrVal = parseInt(hour, 10);
+        if (minVal >= 0 && minVal <= 59 && hrVal >= 0 && hrVal <= 23) {
+          setSchedModalMode('simple');
+          setSimpleSchedFreq('daily');
+          setSimpleSchedDailyTime(`${String(hrVal).padStart(2, '0')}:${String(minVal).padStart(2, '0')}`);
+          matched = true;
+        }
+      }
+
+      // 5. Weekly: M H * * D
+      if (!matched && !isNaN(min) && !isNaN(hour) && dom === '*' && month === '*' && !isNaN(dow)) {
+        const minVal = parseInt(min, 10);
+        const hrVal = parseInt(hour, 10);
+        const dayVal = parseInt(dow, 10);
+        if (minVal >= 0 && minVal <= 59 && hrVal >= 0 && hrVal <= 23 && dayVal >= 0 && dayVal <= 6) {
+          setSchedModalMode('simple');
+          setSimpleSchedFreq('weekly');
+          setSimpleSchedWeeklyDay(dayVal);
+          setSimpleSchedWeeklyTime(`${String(hrVal).padStart(2, '0')}:${String(minVal).padStart(2, '0')}`);
+          matched = true;
+        }
+      }
+    }
+
+    if (!matched) {
+      setSchedModalMode('advanced');
+    }
+    setShowScheduleModal(true);
+  };
+
   const handleCreateOrUpdateSchedule = async (e) => {
     e.preventDefault();
     try {
@@ -742,6 +984,17 @@ export default function ServerDetail() {
       setSchedCron('* * * * *');
       setSchedAction('restart');
       setSchedPayload('');
+      
+      // Reset simple mode states
+      setSchedModalMode('simple');
+      setSimpleSchedFreq('daily');
+      setSimpleSchedDailyTime('04:00');
+      setSimpleSchedMinute(0);
+      setSimpleSchedHourStep(12);
+      setSimpleSchedWeeklyDay(1);
+      setSimpleSchedWeeklyTime('04:00');
+      setSimpleSchedIntervalMin(15);
+      
       fetchSchedules();
     } catch (err) {
       alert(err.message || 'Action failed.');
@@ -2150,14 +2403,7 @@ export default function ServerDetail() {
                   <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Configure standard 5-field cron intervals to automate restarts, backups, or console command scripts.</p>
                 </div>
                 <button 
-                  onClick={() => {
-                    setEditingSchedule(null);
-                    setSchedName('');
-                    setSchedCron('* * * * *');
-                    setSchedAction('restart');
-                    setSchedPayload('');
-                    setShowScheduleModal(true);
-                  }} 
+                  onClick={openCreateScheduleModal} 
                   className="btn btn-primary"
                   disabled={isViewer}
                 >
@@ -2214,14 +2460,7 @@ export default function ServerDetail() {
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <button 
-                          onClick={() => {
-                            setEditingSchedule(sched);
-                            setSchedName(sched.name);
-                            setSchedCron(sched.cron_expression);
-                            setSchedAction(sched.action);
-                            setSchedPayload(sched.action_payload || '');
-                            setShowScheduleModal(true);
-                          }} 
+                          onClick={() => openEditScheduleModal(sched)} 
                           className="btn btn-secondary" 
                           style={{ padding: '4px 10px', fontSize: '12px', marginRight: '6px' }}
                           disabled={isViewer}
@@ -3215,19 +3454,6 @@ export default function ServerDetail() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Cron Expression (5-field)</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  placeholder="e.g. 0 4 * * * (daily 4 AM)"
-                  value={schedCron}
-                  onChange={(e) => setSchedCron(e.target.value)}
-                  required
-                />
-                <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Format: minute hour day-of-month month day-of-week</span>
-              </div>
-
-              <div className="form-group">
                 <label className="form-label">Action Target</label>
                 <select
                   value={schedAction}
@@ -3249,7 +3475,7 @@ export default function ServerDetail() {
               </div>
 
               {schedAction === 'command' && (
-                <div className="form-group animate-fade-in">
+                <div className="form-group animate-fade-in" style={{ marginBottom: '16px' }}>
                   <label className="form-label">Console Command payload</label>
                   <input
                     type="text"
@@ -3262,6 +3488,249 @@ export default function ServerDetail() {
                   <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>The raw command to inject into stdout terminal console.</span>
                 </div>
               )}
+
+              {/* Mode Toggle Tabs */}
+              <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '16px', gap: '16px' }}>
+                <button
+                  type="button"
+                  onClick={() => setSchedModalMode('simple')}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderBottom: schedModalMode === 'simple' ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: schedModalMode === 'simple' ? 'var(--primary)' : 'var(--text-muted)',
+                    padding: '8px 0',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Simple Builder
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSchedModalMode('advanced')}
+                  style={{
+                    backgroundColor: 'transparent',
+                    border: 'none',
+                    borderBottom: schedModalMode === 'advanced' ? '2px solid var(--primary)' : '2px solid transparent',
+                    color: schedModalMode === 'advanced' ? 'var(--primary)' : 'var(--text-muted)',
+                    padding: '8px 0',
+                    fontSize: '13px',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    outline: 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  Advanced (Cron)
+                </button>
+              </div>
+
+              {/* Simple Picker Options */}
+              {schedModalMode === 'simple' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div className="form-group" style={{ marginBottom: '8px' }}>
+                    <label className="form-label">Frequency</label>
+                    <select
+                      value={simpleSchedFreq}
+                      onChange={(e) => setSimpleSchedFreq(e.target.value)}
+                      style={{
+                        backgroundColor: 'var(--bg-dark)',
+                        color: 'var(--text-main)',
+                        border: '1px solid var(--border)',
+                        padding: '8px 12px',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        width: '100%'
+                      }}
+                    >
+                      <option value="interval">Repeat every N Minutes</option>
+                      <option value="hourly">Run every Hour</option>
+                      <option value="everyXHours">Run every N Hours</option>
+                      <option value="daily">Run Daily</option>
+                      <option value="weekly">Run Weekly</option>
+                    </select>
+                  </div>
+
+                  {simpleSchedFreq === 'interval' && (
+                    <div className="form-group animate-fade-in" style={{ marginBottom: '8px' }}>
+                      <label className="form-label">Minute Interval</label>
+                      <select
+                        value={simpleSchedIntervalMin}
+                        onChange={(e) => setSimpleSchedIntervalMin(parseInt(e.target.value, 10))}
+                        style={{
+                          backgroundColor: 'var(--bg-dark)',
+                          color: 'var(--text-main)',
+                          border: '1px solid var(--border)',
+                          padding: '8px 12px',
+                          borderRadius: '8px',
+                          fontSize: '13px',
+                          width: '100%'
+                        }}
+                      >
+                        <option value="5">Every 5 minutes</option>
+                        <option value="10">Every 10 minutes</option>
+                        <option value="15">Every 15 minutes</option>
+                        <option value="30">Every 30 minutes</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {simpleSchedFreq === 'hourly' && (
+                    <div className="form-group animate-fade-in" style={{ marginBottom: '8px' }}>
+                      <label className="form-label">Minute of the Hour</label>
+                      <input
+                        type="number"
+                        className="form-input"
+                        min="0"
+                        max="59"
+                        placeholder="e.g. 0 (at the start of the hour)"
+                        value={simpleSchedMinute}
+                        onChange={(e) => setSimpleSchedMinute(Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {simpleSchedFreq === 'everyXHours' && (
+                    <div style={{ display: 'flex', gap: '12px' }} className="animate-fade-in">
+                      <div className="form-group" style={{ flex: 1, marginBottom: '8px' }}>
+                        <label className="form-label">Hour Step</label>
+                        <select
+                          value={simpleSchedHourStep}
+                          onChange={(e) => setSimpleSchedHourStep(parseInt(e.target.value, 10))}
+                          style={{
+                            backgroundColor: 'var(--bg-dark)',
+                            color: 'var(--text-main)',
+                            border: '1px solid var(--border)',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            width: '100%'
+                          }}
+                        >
+                          <option value="2">Every 2 hours</option>
+                          <option value="3">Every 3 hours</option>
+                          <option value="4">Every 4 hours</option>
+                          <option value="6">Every 6 hours</option>
+                          <option value="8">Every 8 hours</option>
+                          <option value="12">Every 12 hours</option>
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ flex: 1, marginBottom: '8px' }}>
+                        <label className="form-label">At Minute</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          min="0"
+                          max="59"
+                          value={simpleSchedMinute}
+                          onChange={(e) => setSimpleSchedMinute(Math.min(59, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {simpleSchedFreq === 'daily' && (
+                    <div className="form-group animate-fade-in" style={{ marginBottom: '8px' }}>
+                      <label className="form-label">Trigger Time</label>
+                      <input
+                        type="time"
+                        className="form-input"
+                        value={simpleSchedDailyTime}
+                        onChange={(e) => setSimpleSchedDailyTime(e.target.value || '00:00')}
+                        required
+                      />
+                    </div>
+                  )}
+
+                  {simpleSchedFreq === 'weekly' && (
+                    <div style={{ display: 'flex', gap: '12px' }} className="animate-fade-in">
+                      <div className="form-group" style={{ flex: 1, marginBottom: '8px' }}>
+                        <label className="form-label">Day of the Week</label>
+                        <select
+                          value={simpleSchedWeeklyDay}
+                          onChange={(e) => setSimpleSchedWeeklyDay(parseInt(e.target.value, 10))}
+                          style={{
+                            backgroundColor: 'var(--bg-dark)',
+                            color: 'var(--text-main)',
+                            border: '1px solid var(--border)',
+                            padding: '8px 12px',
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            width: '100%'
+                          }}
+                        >
+                          <option value="1">Monday</option>
+                          <option value="2">Tuesday</option>
+                          <option value="3">Wednesday</option>
+                          <option value="4">Thursday</option>
+                          <option value="5">Friday</option>
+                          <option value="6">Saturday</option>
+                          <option value="0">Sunday</option>
+                        </select>
+                      </div>
+                      <div className="form-group" style={{ flex: 1, marginBottom: '8px' }}>
+                        <label className="form-label">Trigger Time</label>
+                        <input
+                          type="time"
+                          className="form-input"
+                          value={simpleSchedWeeklyTime}
+                          onChange={(e) => setSimpleSchedWeeklyTime(e.target.value || '00:00')}
+                          required
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Advanced Raw Input */}
+              {schedModalMode === 'advanced' && (
+                <div className="form-group animate-fade-in" style={{ marginBottom: '8px' }}>
+                  <label className="form-label">Cron Expression (5-field)</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g. 0 4 * * * (daily 4 AM)"
+                    value={schedCron}
+                    onChange={(e) => setSchedCron(e.target.value)}
+                    required
+                  />
+                  <span style={{ fontSize: '11px', color: 'var(--text-dark)', marginTop: '4px' }}>Format: minute hour day-of-month month day-of-week</span>
+                </div>
+              )}
+
+              {/* Live Preview Box */}
+              <div 
+                style={{ 
+                  backgroundColor: 'rgba(255, 255, 255, 0.02)', 
+                  border: '1px dashed var(--border)', 
+                  borderRadius: '8px', 
+                  padding: '12px 16px', 
+                  marginTop: '16px', 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  gap: '6px' 
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Resulting Cron
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', fontWeight: 'bold', color: 'var(--primary)' }}>
+                    {schedCron}
+                  </span>
+                </div>
+                <div style={{ fontSize: '13px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ color: 'var(--primary)' }}>⏰</span>
+                  <span>{explainCron(schedCron)}</span>
+                </div>
+              </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '24px' }}>
                 <button 
