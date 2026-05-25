@@ -1146,6 +1146,7 @@ module.exports = {
   isInstallerCached,
   cacheInstaller,
   installServerFiles,
+  classifyConsoleIssue,
 };
 // Java 25 reload trigger comment
 

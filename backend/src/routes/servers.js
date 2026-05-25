@@ -349,6 +349,65 @@ module.exports = function(db) {
     }
   });
 
+  // GET /api/servers/:id/diagnostics - Scan historical logs for diagnostic issues
+  router.get('/:id/diagnostics', requireServerAccess('viewer', db), (req, res, next) => {
+    const id = parseInt(req.params.id, 10);
+    try {
+      if (isNaN(id)) throw new HttpError(400, 'Invalid server ID.');
+      
+      const { classifyConsoleIssue } = require('../services/serverService');
+      
+      // Fetch up to 2000 logs for scanning
+      const logs = db.prepare(`
+        SELECT stream, line, created_at
+        FROM server_logs
+        WHERE server_id = ?
+        ORDER BY id DESC
+        LIMIT 2000
+      `).all(id);
+
+      const issues = [];
+      const seenLines = new Set();
+
+      for (const log of logs) {
+        const issue = classifyConsoleIssue(log.line, log.stream);
+        if (issue) {
+          // Avoid showing duplicate exact lines
+          const key = `${issue.type}-${issue.line}`;
+          if (!seenLines.has(key)) {
+            seenLines.add(key);
+            issues.push({
+              ...issue,
+              created_at: log.created_at
+            });
+          }
+        }
+      }
+
+      res.json(issues);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // DELETE /api/servers/:id/logs - Clear logs from database for a server
+  router.delete('/:id/logs', requireServerAccess('operator', db), (req, res, next) => {
+    const id = parseInt(req.params.id, 10);
+    try {
+      if (isNaN(id)) throw new HttpError(400, 'Invalid server ID.');
+      
+      const server = getServer(db, id);
+      db.prepare('DELETE FROM server_logs WHERE server_id = ?').run(id);
+
+      db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
+        .run(req.user.sub, 'clear-server-logs', `server:${id}`, `Cleared logs history database for server ${server.slug}`, req.ip);
+
+      res.json({ message: 'Server logs database successfully cleared.' });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // GET /api/servers/:id/players (retrieve online players list)
   router.get('/:id/players', requireServerAccess('viewer', db), (req, res, next) => {
     const id = parseInt(req.params.id, 10);

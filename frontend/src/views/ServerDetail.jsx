@@ -111,6 +111,14 @@ export default function ServerDetail() {
   const [bansContent, setBansContent] = useState('');
   const [savingPlayers, setSavingPlayers] = useState(false);
 
+  // 7. Diagnostics / Logger Tab State
+  const [diagnostics, setDiagnostics] = useState([]);
+  const [isDiagnosticsLoading, setIsDiagnosticsLoading] = useState(false);
+  const [diagFilter, setDiagFilter] = useState('all'); // 'all' | 'error' | 'warning'
+  const [diagSearch, setDiagSearch] = useState('');
+  const [logsFilter, setLogsFilter] = useState('all'); // 'all' | 'stdout' | 'stderr' | 'sent'
+
+
   useEffect(() => {
     isMountedRef.current = true;
     setCurrentUser(getUser());
@@ -158,6 +166,11 @@ export default function ServerDetail() {
     if (activeTab === 'config') {
       fetchServerConfig();
     }
+
+    if (activeTab === 'logger') {
+      fetchDiagnostics();
+      fetchLogs();
+    }
   }, [activeTab, currentRelPath]);
 
   const fetchLogs = async () => {
@@ -168,6 +181,51 @@ export default function ServerDetail() {
     } catch (err) {
       console.error('Failed to fetch historical logs:', err);
     }
+  };
+
+  const fetchDiagnostics = async () => {
+    try {
+      setIsDiagnosticsLoading(true);
+      const data = await apiRequest(`/servers/${id}/diagnostics`);
+      setDiagnostics(data || []);
+    } catch (err) {
+      console.error('Failed to fetch historical diagnostics:', err);
+    } finally {
+      setIsDiagnosticsLoading(false);
+    }
+  };
+
+  const handleClearLogsHistory = async () => {
+    if (!await showConfirm('Are you sure you want to permanently delete all server console and error log history from the database? This cannot be undone.', { title: 'Wipe Log History', isDanger: true })) return;
+    try {
+      await apiRequest(`/servers/${id}/logs`, { method: 'DELETE' });
+      setLogs([]);
+      setDiagnostics([]);
+      alert('Server logs history database successfully cleared.');
+    } catch (err) {
+      alert(`Failed to clear log history: ${err.message}`);
+    }
+  };
+
+  const handleDownloadLogs = () => {
+    const filteredLogs = logs.filter(line => {
+      // Search text filtering
+      if (diagSearch && !cleanAnsiCodes(line).toLowerCase().includes(diagSearch.toLowerCase())) {
+        return false;
+      }
+      return true;
+    });
+
+    const fileContent = filteredLogs.map(line => cleanAnsiCodes(line)).join('\r\n');
+    const blob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${server?.slug || 'server'}-logs.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // WS Connection for real-time console logs
@@ -1137,8 +1195,8 @@ export default function ServerDetail() {
         </div>
 
         {/* Tab Selection */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '24px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
-          {['console', 'files', 'mods', 'backups', 'schedules', 'players', 'config'].map((tab) => (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '24px', borderTop: '1px solid var(--border)', paddingTop: '16px', flexWrap: 'wrap' }}>
+          {['console', 'files', 'mods', 'backups', 'schedules', 'players', 'config', 'logger'].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1152,7 +1210,7 @@ export default function ServerDetail() {
                 textTransform: 'capitalize'
               }}
             >
-              {tab}
+              {tab === 'logger' ? '🔍 Diagnostics & Logs' : tab}
             </button>
           ))}
         </div>
@@ -2731,6 +2789,395 @@ export default function ServerDetail() {
           )}
         </div>
       )}
+
+        {/* 7. DIAGNOSTICS & LOGGER TAB */}
+        {activeTab === 'logger' && (
+          <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
+            
+            {/* 1. Log Statistics Dashboard */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '20px' }}>
+              
+              {/* Card 1: Total Lines */}
+              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                  Total Log Entries
+                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '28px', fontWeight: 'bold', color: 'var(--text-main)' }}>
+                    {logs.length}
+                  </span>
+                  <span style={{ fontSize: '24px' }}>📄</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dark)' }}>
+                  Stored in buffer and scanned historically
+                </div>
+              </div>
+
+              {/* Card 2: Critical Failures */}
+              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--error)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                  Critical Exceptions
+                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '28px', fontWeight: 'bold', color: 'var(--error)' }}>
+                    {diagnostics.filter(d => d.severity === 'error').length}
+                  </span>
+                  <span style={{ fontSize: '24px' }}>⚠️</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dark)' }}>
+                  Failed library loading or JVM issues
+                </div>
+              </div>
+
+              {/* Card 3: Warnings */}
+              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                  System Warnings
+                </span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'var(--font-heading)', fontSize: '28px', fontWeight: 'bold', color: 'var(--primary)' }}>
+                    {diagnostics.filter(d => d.severity === 'warning').length}
+                  </span>
+                  <span style={{ fontSize: '24px' }}>⚡</span>
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dark)' }}>
+                  Performance lag & deprecated warnings
+                </div>
+              </div>
+
+              {/* Card 4: Health Status */}
+              <div className="glass-panel" style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: '600' }}>
+                  Diagnostics Status
+                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
+                  {diagnostics.filter(d => d.severity === 'error').length > 0 ? (
+                    <>
+                      <div className="status-dot warning" style={{ width: '12px', height: '12px' }} />
+                      <span className="badge badge-error" style={{ fontSize: '12px', padding: '6px 12px' }}>
+                        ERRORS DETECTED
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="status-dot active" style={{ width: '12px', height: '12px' }} />
+                      <span className="badge badge-success" style={{ fontSize: '12px', padding: '6px 12px' }}>
+                        BOOT HEALTHY
+                      </span>
+                    </>
+                  )}
+                </div>
+                <div style={{ fontSize: '11px', color: 'var(--text-dark)', marginTop: '4px' }}>
+                  Server diagnostic scanner state
+                </div>
+              </div>
+
+            </div>
+
+            {/* 2. Interactive Diagnostics Scanner */}
+            <div className="glass-panel">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                    Exception & Issue Classifier
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                    Historical and real-time scanned logs analyzed for immediate resolution guides.
+                  </p>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button 
+                    onClick={fetchDiagnostics} 
+                    className="btn btn-secondary" 
+                    disabled={isDiagnosticsLoading}
+                    style={{ padding: '6px 16px', fontSize: '13px' }}
+                  >
+                    {isDiagnosticsLoading ? 'Scanning...' : '🔄 Run Diagnostic Scan'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+                {['all', 'error', 'warning'].map((sev) => (
+                  <button
+                    key={sev}
+                    onClick={() => setDiagFilter(sev)}
+                    className="btn"
+                    style={{
+                      padding: '4px 12px',
+                      fontSize: '11px',
+                      borderRadius: '6px',
+                      backgroundColor: diagFilter === sev ? 'var(--primary-glow)' : 'rgba(0,0,0,0.2)',
+                      borderColor: diagFilter === sev ? 'var(--primary)' : 'var(--border)',
+                      color: diagFilter === sev ? 'var(--primary)' : 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                      fontWeight: '600'
+                    }}
+                  >
+                    {sev === 'all' ? 'All Issues' : `${sev}s`}
+                  </button>
+                ))}
+              </div>
+
+              {isDiagnosticsLoading ? (
+                <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
+                  Scanning SQLite database logs history for Hytale server...
+                </div>
+              ) : diagnostics.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '48px', color: 'var(--text-dark)', fontSize: '14px' }}>
+                  No issues caught in log history. Hytale server boot sequence is clean and healthy.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {diagnostics
+                    .filter(d => diagFilter === 'all' || d.severity === diagFilter)
+                    .map((issue, idx) => (
+                      <div 
+                        key={idx}
+                        className="glass-panel"
+                        style={{
+                          padding: '20px',
+                          borderLeft: issue.severity === 'error' ? '4px solid var(--error)' : '4px solid var(--primary)',
+                          backgroundColor: issue.severity === 'error' ? 'rgba(244, 63, 94, 0.02)' : 'rgba(245, 158, 11, 0.02)',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '12px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span className={issue.severity === 'error' ? 'badge badge-error' : 'badge badge-warning'}>
+                              {issue.severity}
+                            </span>
+                            <span style={{ fontSize: '14px', fontWeight: 'bold', color: 'var(--text-main)', fontFamily: 'var(--font-heading)' }}>
+                              {issue.title || 'Log Exception Pattern'}
+                            </span>
+                          </div>
+                          <span style={{ fontSize: '11px', color: 'var(--text-dark)', fontFamily: 'var(--font-mono)' }}>
+                            Logged at: {issue.created_at || 'just now'}
+                          </span>
+                        </div>
+
+                        <div style={{ backgroundColor: '#050608', padding: '12px', borderRadius: '6px', border: '1px solid var(--border)', overflowX: 'auto' }}>
+                          <code style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--error)' }}>
+                            {issue.line}
+                          </code>
+                        </div>
+
+                        <div style={{ borderTop: '1px dashed var(--border)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
+                            <strong style={{ color: 'var(--primary)' }}>Diagnostics & Remediation:</strong> {issue.hint}
+                          </div>
+                          
+                          <div style={{ display: 'flex', gap: '12px', marginTop: '6px', flexWrap: 'wrap' }}>
+                            {issue.type === 'dependency' && (
+                              <button 
+                                onClick={() => setActiveTab('mods')}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 12px', fontSize: '11px', fontWeight: '600', borderColor: 'var(--primary-border)', color: 'var(--primary)' }}
+                              >
+                                📦 Go to Mod Manager
+                              </button>
+                            )}
+                            {issue.type === 'conflict' && (
+                              <button 
+                                onClick={() => setActiveTab('mods')}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 12px', fontSize: '11px', fontWeight: '600', borderColor: 'var(--primary-border)', color: 'var(--primary)' }}
+                              >
+                                💥 Resolve Conflicts
+                              </button>
+                            )}
+                            {issue.line.toLowerCase().includes('java') && (
+                              <button 
+                                onClick={() => setActiveTab('config')}
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 12px', fontSize: '11px', fontWeight: '600', borderColor: 'var(--primary-border)', color: 'var(--primary)' }}
+                              >
+                                ⚙️ Configure JVM / Java
+                              </button>
+                            )}
+                            <button 
+                              onClick={() => setActiveTab('files')}
+                              className="btn btn-secondary"
+                              style={{ padding: '4px 12px', fontSize: '11px' }}
+                            >
+                              📂 Browse Files
+                            </button>
+                          </div>
+                        </div>
+
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+
+            {/* 3. Log Explorer Console */}
+            <div className="glass-panel">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
+                <div>
+                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                    Log Explorer & Console History
+                  </h3>
+                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', marginTop: '4px' }}>
+                    Inspect, search, and export persistent console outputs stored in the SQLite database.
+                  </p>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '12px' }}>
+                  <button 
+                    onClick={handleDownloadLogs} 
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 16px', fontSize: '13px' }}
+                    disabled={logs.length === 0}
+                  >
+                    📥 Download Filtered Logs
+                  </button>
+                  <button 
+                    onClick={handleClearLogsHistory} 
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 16px', fontSize: '13px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
+                    disabled={logs.length === 0 || isViewer}
+                  >
+                    🗑️ Wipe Logs Database
+                  </button>
+                </div>
+              </div>
+
+              {/* Console search & stream filters bar */}
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ flex: 1, minWidth: '240px', position: 'relative' }}>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="Search logs pattern..."
+                    value={diagSearch}
+                    onChange={(e) => setDiagSearch(e.target.value)}
+                    style={{ width: '100%', paddingLeft: '36px', height: '36px', fontSize: '13px' }}
+                  />
+                  <span style={{ position: 'absolute', left: '12px', top: '10px', color: 'var(--text-dark)' }}>🔍</span>
+                  {diagSearch && (
+                    <button 
+                      onClick={() => setDiagSearch('')}
+                      style={{ position: 'absolute', right: '12px', top: '8px', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>STREAM:</span>
+                  {['all', 'stdout', 'stderr', 'sent'].map((stream) => (
+                    <button
+                      key={stream}
+                      onClick={() => setLogsFilter(stream)}
+                      className="btn"
+                      style={{
+                        padding: '4px 12px',
+                        fontSize: '11px',
+                        borderRadius: '6px',
+                        backgroundColor: logsFilter === stream ? 'var(--primary-glow)' : 'rgba(0,0,0,0.2)',
+                        borderColor: logsFilter === stream ? 'var(--primary)' : 'var(--border)',
+                        color: logsFilter === stream ? 'var(--primary)' : 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        fontWeight: '600'
+                      }}
+                    >
+                      {stream === 'sent' ? 'Input Cmds' : stream}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Terminal View Panel */}
+              <div 
+                className="console-terminal"
+                style={{
+                  backgroundColor: '#040508',
+                  border: '1px solid var(--border)',
+                  borderRadius: '10px',
+                  padding: '20px',
+                  fontFamily: 'var(--font-mono)',
+                  fontSize: '12px',
+                  lineHeight: '1.6',
+                  height: '450px',
+                  overflowY: 'auto',
+                  boxShadow: 'inset 0 0 10px rgba(0,0,0,0.8)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px'
+                }}
+              >
+                {logs.length === 0 ? (
+                  <div style={{ color: 'var(--text-dark)', textAlign: 'center', marginTop: '180px' }}>
+                    No console logs history retrieved. Run the server to stream outputs.
+                  </div>
+                ) : (
+                  (() => {
+                    const filtered = logs.filter(line => {
+                      // Stream filtering
+                      if (logsFilter !== 'all') {
+                        if (logsFilter === 'sent' && !line.startsWith('>')) return false;
+                        if (logsFilter === 'stdout' && (line.startsWith('>') || line.toLowerCase().includes('err') || line.toLowerCase().includes('exception'))) return false;
+                        if (logsFilter === 'stderr' && !line.startsWith('>') && (line.toLowerCase().includes('err') || line.toLowerCase().includes('exception'))) return true;
+                      }
+
+                      // Search filtering
+                      if (diagSearch && !cleanAnsiCodes(line).toLowerCase().includes(diagSearch.toLowerCase())) {
+                        return false;
+                      }
+                      return true;
+                    });
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div style={{ color: 'var(--text-dark)', textAlign: 'center', marginTop: '180px' }}>
+                          No log lines match the search criteria.
+                        </div>
+                      );
+                    }
+
+                    return filtered.map((line, idx) => {
+                      const isError = line.toLowerCase().includes('error') || line.toLowerCase().includes('exception') || line.toLowerCase().includes('fatal');
+                      const isWarning = line.toLowerCase().includes('warn') || line.toLowerCase().includes('warning');
+                      const isCommand = line.startsWith('>');
+
+                      let color = 'rgba(255,255,255,0.85)';
+                      if (isError) color = 'var(--error)';
+                      else if (isWarning) color = 'var(--primary)';
+                      else if (isCommand) color = 'var(--secondary)';
+
+                      return (
+                        <div 
+                          key={idx} 
+                          style={{ 
+                            color, 
+                            whiteSpace: 'pre-wrap', 
+                            wordBreak: 'break-all',
+                            padding: '2px 4px',
+                            borderRadius: '4px',
+                            backgroundColor: isError ? 'rgba(244, 63, 94, 0.05)' : 'transparent'
+                          }}
+                        >
+                          {renderLineWithLinks(cleanAnsiCodes(line))}
+                        </div>
+                      );
+                    });
+                  })()
+                )}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-dark)', marginTop: '8px' }}>
+                <span>Showing up to 200 buffered database log lines</span>
+                <span>Click parsed links to open documentation references</span>
+              </div>
+            </div>
+          </div>
+        )}
           </>
         )}
 
