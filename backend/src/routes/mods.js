@@ -290,10 +290,107 @@ module.exports = function(db) {
     }
   });
 
+  // GET /api/servers/:serverId/mods/configs - Find editable configurations for an installed mod
+  router.get('/server/:serverId/configs', async (req, res, next) => {
+    const { serverId } = req.params;
+    const { fileName } = req.query;
+    try {
+      if (!fileName) throw new HttpError(400, 'FileName query parameter is required.');
+
+      const { server } = resolveModsDir(serverId);
+      const cleanName = fileName.replace('.disabled', '').replace(/\.(jar|zip)$/i, '');
+      
+      const candidatePaths = [
+        path.join(server.install_path, 'mods', cleanName),
+        path.join(server.install_path, 'mods', 'config', cleanName),
+        path.join(server.install_path, 'config', cleanName)
+      ];
+
+      const configs = [];
+      const editableExtensions = ['.json', '.toml', '.yml', '.yaml', '.properties', '.txt', '.cfg', '.config', '.ini'];
+
+      function scanFolder(dir) {
+        if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return;
+        
+        const items = fs.readdirSync(dir);
+        for (const item of items) {
+          const fullPath = path.join(dir, item);
+          const stat = fs.statSync(fullPath);
+          
+          if (stat.isDirectory()) {
+            scanFolder(fullPath);
+          } else {
+            const ext = path.extname(item).toLowerCase();
+            if (editableExtensions.includes(ext)) {
+              configs.push({
+                name: item,
+                relPath: path.relative(server.install_path, fullPath).replace(/\\/g, '/'),
+                size: stat.size,
+                mtime: stat.mtime
+              });
+            }
+          }
+        }
+      }
+
+      for (const cand of candidatePaths) {
+        scanFolder(cand);
+      }
+
+      res.json({ configs });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/servers/:serverId/mods/updates - Check for available updates on CurseForge
+  router.get('/server/:serverId/updates', async (req, res, next) => {
+    const { serverId } = req.params;
+    try {
+      const dbMods = db.prepare("SELECT * FROM installed_mods WHERE server_id = ? AND curseforge_mod_id != 'manual'").all(serverId);
+      const updates = [];
+
+      for (const mod of dbMods) {
+        try {
+          const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 5 });
+          if (files.length === 0) continue;
+
+          // Find the latest compatible or newest file (typically the first returned)
+          const latestFile = files[0];
+          const latestFileId = parseInt(latestFile.id, 10);
+          const currentFileId = parseInt(mod.curseforge_file_id, 10);
+
+          if (!isNaN(latestFileId) && !isNaN(currentFileId) && latestFileId > currentFileId) {
+            const sha1Hash = latestFile.hashes ? latestFile.hashes.find(h => h.algo === 1 || h.algo === 'sha1') : null;
+            updates.push({
+              fileName: mod.file_name,
+              modName: mod.mod_name,
+              curseforgeModId: mod.curseforge_mod_id,
+              currentFileId: mod.curseforge_file_id,
+              latestFileId: latestFile.id,
+              latestVersion: latestFile.displayName,
+              latestFileName: latestFile.fileName,
+              latestFileLength: latestFile.fileLength,
+              latestSha1: sha1Hash ? sha1Hash.value : null,
+              latestDownloadUrl: latestFile.downloadUrl
+            });
+          }
+        } catch (err) {
+          const logger = require('../utils/logger');
+          logger.warn(`Failed to check updates for mod ID ${mod.curseforge_mod_id}: ${err.message}`);
+        }
+      }
+
+      res.json({ updates });
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // POST /api/servers/:serverId/mods/install - Download mod from CurseForge or direct URL and optionally restore backup
   router.post('/server/:serverId/install', async (req, res, next) => {
     const { serverId } = req.params;
-    const { source, modId, fileId, downloadUrl, fileName, sha1, restoreBackupId } = req.body;
+    const { source, modId, fileId, downloadUrl, fileName, sha1, restoreBackupId, deleteOldFileName } = req.body;
     try {
       if (!fileName) throw new HttpError(400, 'FileName is required.');
 
@@ -356,7 +453,8 @@ module.exports = function(db) {
       const result = await downloadModFile(db, parseInt(serverId, 10), resolvedUrl, fileName, {
         curseforgeModId: modId,
         curseforgeFileId: fileId,
-        sha1
+        sha1,
+        deleteOldFileName
       });
 
       // Log audit log
@@ -441,7 +539,7 @@ module.exports = function(db) {
 
   // GET /api/mods/search - Unified browse and search mods
   router.get('/search', async (req, res, next) => {
-    const { q = '', source = 'curseforge', categoryId, offset = 0, limit = 20 } = req.query;
+    const { q = '', source = 'curseforge', categoryId, offset = 0, limit = 20, sortBy = 'featured' } = req.query;
     try {
       let results = [];
       const opts = {
@@ -449,6 +547,7 @@ module.exports = function(db) {
         categoryId: categoryId ? parseInt(categoryId, 10) : null,
         offset: parseInt(offset, 10),
         limit: parseInt(limit, 10),
+        sortBy,
       };
 
       if (source === 'nexus') {

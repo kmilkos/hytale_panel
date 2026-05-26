@@ -228,6 +228,17 @@ export default function ServerDetail() {
   const [selectedModFiles, setSelectedModFiles] = useState([]);
   const [conflictsList, setConflictsList] = useState([]);
   const [activeDownloads, setActiveDownloads] = useState([]);
+  const [expandedModConfigs, setExpandedModConfigs] = useState({});
+  const [modConfigsList, setModConfigsList] = useState({});
+  const [fetchingConfigs, setFetchingConfigs] = useState({});
+  const [modUpdates, setModUpdates] = useState({});
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [updatingMods, setUpdatingMods] = useState({});
+  const [selectedInstalledMod, setSelectedInstalledMod] = useState(null);
+  const [selectedInstalledModDetails, setSelectedInstalledModDetails] = useState(null);
+  const [loadingInstalledModDetails, setLoadingInstalledModDetails] = useState(false);
+  const [modsSortBy, setModsSortBy] = useState('featured');
+  const [remoteSearchError, setRemoteSearchError] = useState(null);
 
   // 4. Backups Tab State
   const [backups, setBackups] = useState([]);
@@ -282,6 +293,7 @@ export default function ServerDetail() {
     fetchBackups();
     fetchInstalledMods();
     fetchActiveDownloads();
+    handleCheckUpdates();
     
     fetchMetrics();
     fetchSchedules();
@@ -296,6 +308,61 @@ export default function ServerDetail() {
       if (wsRef.current) wsRef.current.close();
     };
   }, [id]);
+
+  useEffect(() => {
+    if (!selectedInstalledMod) {
+      setSelectedInstalledModDetails(null);
+      return;
+    }
+
+    const fileName = selectedInstalledMod.fileName;
+    
+    // Automatically load configs
+    if (!modConfigsList[fileName] && !fetchingConfigs[fileName]) {
+      const loadConfigs = async () => {
+        setFetchingConfigs(prev => ({ ...prev, [fileName]: true }));
+        try {
+          const data = await apiRequest(`/mods/server/${id}/configs?fileName=${encodeURIComponent(fileName)}`);
+          if (isMountedRef.current) {
+            setModConfigsList(prev => ({
+              ...prev,
+              [fileName]: data.configs || []
+            }));
+          }
+        } catch (err) {
+          console.error('Failed to load configs for ' + fileName, err);
+        } finally {
+          if (isMountedRef.current) {
+            setFetchingConfigs(prev => ({ ...prev, [fileName]: false }));
+          }
+        }
+      };
+      loadConfigs();
+    }
+
+    // Automatically load remote details if CurseForge mod
+    if (selectedInstalledMod.modId && selectedInstalledMod.modId !== 'manual') {
+      const loadDetails = async () => {
+        setLoadingInstalledModDetails(true);
+        setSelectedInstalledModDetails(null);
+        try {
+          const details = await apiRequest(`/mods/details/curseforge/${selectedInstalledMod.modId}`);
+          if (isMountedRef.current) {
+            setSelectedInstalledModDetails(details);
+          }
+        } catch (err) {
+          console.error('Failed to fetch details for mod ' + selectedInstalledMod.modId, err);
+        } finally {
+          if (isMountedRef.current) {
+            setLoadingInstalledModDetails(false);
+          }
+        }
+      };
+      loadDetails();
+    } else {
+      setSelectedInstalledModDetails(null);
+    }
+  }, [selectedInstalledMod, id]);
 
   useEffect(() => {
     if (activeTab === 'console') {
@@ -1194,16 +1261,122 @@ export default function ServerDetail() {
   const fetchInstalledMods = async () => {
     try {
       const data = await apiRequest(`/mods/server/${id}`);
-      setInstalledMods(data.mods || []);
+      const list = data.mods || [];
+      setInstalledMods(list);
+      setSelectedInstalledMod(current => {
+        if (!current) return null;
+        const updated = list.find(m => m.fileName === current.fileName);
+        return updated || null;
+      });
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const handleToggleConfigs = async (fileName) => {
+    const isExpanded = !!expandedModConfigs[fileName];
+    
+    setExpandedModConfigs(prev => ({
+      ...prev,
+      [fileName]: !isExpanded
+    }));
+
+    if (isExpanded) return;
+
+    setFetchingConfigs(prev => ({ ...prev, [fileName]: true }));
+    try {
+      const data = await apiRequest(`/mods/server/${id}/configs?fileName=${encodeURIComponent(fileName)}`);
+      setModConfigsList(prev => ({
+        ...prev,
+        [fileName]: data.configs || []
+      }));
+    } catch (err) {
+      console.error('Failed to load configs for ' + fileName, err);
+      alert('Failed to load configs: ' + err.message);
+    } finally {
+      setFetchingConfigs(prev => ({ ...prev, [fileName]: false }));
+    }
+  };
+
+  const handleEditConfig = async (config) => {
+    try {
+      const data = await apiRequest(`/files/read?serverId=${id}&relPath=${encodeURIComponent(config.relPath)}`);
+      setEditingContent(data.content || '');
+      setEditingFile({ relPath: config.relPath, name: config.name });
+    } catch (err) {
+      console.error('Failed to read config file', err);
+      alert('Failed to open config file: ' + err.message);
+    }
+  };
+
+  const handleCheckUpdates = async () => {
+    setCheckingUpdates(true);
+    try {
+      const data = await apiRequest(`/mods/server/${id}/updates`);
+      const updatesMap = {};
+      for (const upd of data.updates) {
+        updatesMap[upd.fileName] = upd;
+      }
+      setModUpdates(updatesMap);
+    } catch (err) {
+      console.error('Failed to check for mod updates', err);
+    } finally {
+      setCheckingUpdates(false);
+    }
+  };
+
+  const handleUpdateMod = async (oldFileName, update) => {
+    setUpdatingMods(prev => ({ ...prev, [oldFileName]: true }));
+    try {
+      await apiRequest(`/mods/server/${id}/install`, {
+        method: 'POST',
+        body: JSON.stringify({
+          source: 'curseforge',
+          modId: update.curseforgeModId,
+          fileId: update.latestFileId,
+          fileName: update.latestFileName,
+          sha1: update.latestSha1,
+          deleteOldFileName: oldFileName
+        })
+      });
+      
+      setModUpdates(prev => {
+        const copy = { ...prev };
+        delete copy[oldFileName];
+        return copy;
+      });
+
+      fetchActiveDownloads();
+    } catch (err) {
+      console.error('Failed to update mod ' + oldFileName, err);
+      alert('Update failed: ' + err.message);
+    } finally {
+      setUpdatingMods(prev => ({ ...prev, [oldFileName]: false }));
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    const list = Object.entries(modUpdates);
+    if (list.length === 0) return;
+
+    if (!confirm(`Are you sure you want to update all ${list.length} outdated mods?`)) return;
+
+    for (const [oldFileName, update] of list) {
+      await handleUpdateMod(oldFileName, update);
     }
   };
 
   const fetchActiveDownloads = async () => {
     try {
       const data = await apiRequest(`/mods/server/${id}/downloads`);
-      setActiveDownloads(data || []);
+      setActiveDownloads(prev => {
+        const hadActive = prev.some(dl => dl.status === 'downloading' || dl.status === 'verifying');
+        const hasFinished = data && data.some(dl => dl.status === 'completed' || dl.status === 'failed');
+        if (hadActive && (hasFinished || (data && data.length < prev.length))) {
+          fetchInstalledMods();
+        }
+        return data || [];
+      });
     } catch (err) {
       console.error(err);
     }
@@ -1212,16 +1385,24 @@ export default function ServerDetail() {
   const handleSearchMods = async (e) => {
     e?.preventDefault();
     setSearchingRemote(true);
+    setRemoteSearchError(null);
     try {
-      const data = await apiRequest(`/mods/search?source=${modsSource}&q=${encodeURIComponent(modsSearchQuery)}`);
+      const data = await apiRequest(`/mods/search?source=${modsSource}&q=${encodeURIComponent(modsSearchQuery)}&sortBy=${modsSortBy}`);
       setRemoteMods(data || []);
       setSelectedMod(null);
     } catch (err) {
-      alert(err.message);
+      console.error('Remote search failed: ', err);
+      setRemoteSearchError(err.message || 'An error occurred fetching remote mods.');
     } finally {
       setSearchingRemote(false);
     }
   };
+
+  useEffect(() => {
+    if (activeTab === 'mods') {
+      handleSearchMods();
+    }
+  }, [modsSortBy, modsSource, activeTab]);
 
   const handleViewModDetails = async (mod) => {
     setSelectedMod(mod);
@@ -2011,38 +2192,7 @@ export default function ServerDetail() {
               })()}
             </div>
 
-            {/* In-Browser Code File Editor Overlay */}
-            {editingFile && (
-              <div className="modal-overlay">
-                <div className="modal-content" style={{ maxWidth: '800px', width: '90%' }}>
-                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px' }}>
-                    Edit File: {editingFile.name}
-                  </h3>
-                  <textarea
-                    value={editingContent}
-                    onChange={(e) => setEditingContent(e.target.value)}
-                    style={{
-                      width: '100%',
-                      height: '400px',
-                      backgroundColor: '#050608',
-                      color: 'var(--text-main)',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      padding: '16px',
-                      fontFamily: 'var(--font-mono)',
-                      fontSize: '13px',
-                      resize: 'vertical',
-                      outline: 'none',
-                      marginBottom: '16px'
-                    }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                    <button onClick={() => setEditingFile(null)} className="btn btn-secondary">Cancel</button>
-                    <button onClick={handleSaveFile} className="btn btn-primary" disabled={isViewer}>Save Changes</button>
-                  </div>
-                </div>
-              </div>
-            )}
+
           </div>
         )}
 
@@ -2050,236 +2200,514 @@ export default function ServerDetail() {
         {activeTab === 'mods' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
             {/* Installed Server Mods */}
-            <div className="glass-panel animate-fade-in">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
-                <div>
-                  <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)' }}>Installed Mods</h3>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Local mods in the server/mods folder.</p>
+            {/* Installed Server Mods Grid Container */}
+            <div style={{ display: 'grid', gridTemplateColumns: selectedInstalledMod ? '1.2fr 1fr' : '1fr', gap: '24px', transition: 'all 0.3s ease' }}>
+              
+              {/* Left Side: Installed List */}
+              <div className="glass-panel animate-fade-in" style={{ height: 'fit-content' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+                  <div>
+                    <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)' }}>Installed Mods</h3>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Local mods in the server/mods folder.</p>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                    {Object.keys(modUpdates).length > 0 && (
+                      <button 
+                        onClick={handleBulkUpdate} 
+                        className="btn btn-primary" 
+                        style={{ padding: '6px 12px', fontSize: '13px', backgroundColor: 'rgba(16, 185, 129, 0.2)', border: '1px solid var(--success)', color: 'var(--success)' }}
+                        disabled={isViewer}
+                      >
+                        ⚡ Update All ({Object.keys(modUpdates).length})
+                      </button>
+                    )}
+                    <button 
+                      onClick={handleCheckUpdates} 
+                      className="btn btn-secondary" 
+                      style={{ padding: '6px 12px', fontSize: '13px' }}
+                      disabled={checkingUpdates}
+                    >
+                      {checkingUpdates ? 'Scanning...' : '🔄 Check Updates'}
+                    </button>
+                    <button onClick={() => modFileInputRef.current?.click()} className="btn btn-accent" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={isViewer}>
+                      Upload Mod
+                    </button>
+                    <input 
+                      type="file" 
+                      ref={modFileInputRef} 
+                      onChange={handleUploadMod} 
+                      style={{ display: 'none' }} 
+                      accept=".jar,.zip"
+                      disabled={isViewer}
+                    />
+                    <button onClick={handleScanConflicts} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={isViewer}>
+                      Scan Conflicts
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  <button onClick={() => modFileInputRef.current?.click()} className="btn btn-accent" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={isViewer}>
-                    Upload Mod (.jar/.zip)
-                  </button>
-                  <input 
-                    type="file" 
-                    ref={modFileInputRef} 
-                    onChange={handleUploadMod} 
-                    style={{ display: 'none' }} 
-                    accept=".jar,.zip"
-                    disabled={isViewer}
-                  />
-                  <button onClick={handleScanConflicts} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }} disabled={isViewer}>
-                    Scan for Conflicts
-                  </button>
+                {/* Active Downloads HUD */}
+                {activeDownloads.length > 0 && (
+                  <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <h4 style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
+                        Background Downloads
+                      </h4>
+                      <span style={{ fontSize: '11px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '10px', padding: '1px 7px', fontWeight: '600' }}>
+                        {activeDownloads.length}
+                      </span>
+                    </div>
+
+                    {activeDownloads.map((dl) => {
+                      const isFailed = dl.status === 'failed';
+                      const isCompleted = dl.status === 'completed';
+                      const isVerifying = dl.status === 'verifying';
+                      const isActive = dl.status === 'downloading';
+
+                      const barColor = isFailed
+                        ? 'var(--error)'
+                        : isCompleted
+                        ? 'var(--success)'
+                        : 'var(--primary)';
+
+                      const badgeStyle = isFailed
+                        ? { backgroundColor: 'rgba(244,63,94,0.12)', color: 'var(--error)', border: '1px solid rgba(244,63,94,0.35)' }
+                        : isCompleted
+                        ? { backgroundColor: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.35)' }
+                        : isVerifying
+                        ? { backgroundColor: 'rgba(245,158,11,0.12)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.35)' }
+                        : { backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', border: '1px solid var(--primary-border)' };
+
+                      const formatBytes = (b) => {
+                        if (!b) return '0 B';
+                        if (b < 1024) return `${b} B`;
+                        if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+                        return `${(b / (1024 * 1024)).toFixed(2)} MB`;
+                      };
+
+                      return (
+                        <div
+                          key={dl.downloadId}
+                          style={{
+                            backgroundColor: isFailed ? 'rgba(244,63,94,0.04)' : isCompleted ? 'rgba(16,185,129,0.04)' : 'var(--primary-glow)',
+                            border: `1px solid ${isFailed ? 'rgba(244,63,94,0.2)' : isCompleted ? 'rgba(16,185,129,0.2)' : 'var(--primary-border)'}`,
+                            borderRadius: '10px',
+                            padding: '12px 14px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '8px',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span style={{ fontSize: '13px', fontWeight: '600', fontFamily: 'var(--font-mono)', color: 'var(--text-main)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {dl.fileName}
+                            </span>
+                            <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', borderRadius: '6px', padding: '2px 8px', whiteSpace: 'nowrap', ...badgeStyle }}>
+                              {isVerifying ? 'Verifying' : isActive ? 'Downloading' : isCompleted ? 'Complete' : 'Failed'}
+                            </span>
+                            {(isFailed || isCompleted) && (
+                              <button
+                                onClick={() => setActiveDownloads(prev => prev.filter(d => d.downloadId !== dl.downloadId))}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-dark)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
+                                title="Dismiss"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+
+                          <div style={{ position: 'relative', width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{
+                              width: `${dl.progress || 0}%`,
+                              height: '100%',
+                              backgroundColor: barColor,
+                              boxShadow: isFailed ? 'none' : `0 0 8px ${barColor}`,
+                              borderRadius: '3px',
+                              transition: 'width 0.4s ease-in-out',
+                            }} />
+                            {isActive && (
+                              <div style={{
+                                position: 'absolute',
+                                top: 0, left: 0,
+                                width: '100%', height: '100%',
+                                background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%)',
+                                animation: 'shimmer 1.4s infinite',
+                              }} />
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
+                            {isFailed ? (
+                              <span style={{ color: 'var(--error)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                                <span>⚠</span>
+                                <span>{dl.error || 'Download failed. Check your connection.'}</span>
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-dark)' }}>
+                                {isCompleted
+                                  ? `✓ ${formatBytes(dl.downloadedBytes)} — installed`
+                                  : isVerifying
+                                  ? 'Verifying SHA1 checksum...'
+                                  : dl.totalBytes > 0
+                                  ? `${formatBytes(dl.downloadedBytes)} / ${formatBytes(dl.totalBytes)}`
+                                  : `${formatBytes(dl.downloadedBytes)} downloaded`}
+                              </span>
+                            )}
+                            <span style={{ color: isFailed ? 'var(--error)' : isCompleted ? 'var(--success)' : 'var(--primary)', fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>
+                              {dl.progress || 0}%
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Installed Grid List */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: selectedInstalledMod ? '3fr 1fr' : '3fr 1fr 1.5fr', 
+                    padding: '8px', 
+                    color: 'var(--text-muted)', 
+                    fontSize: '12px', 
+                    borderBottom: '1px solid var(--border)', 
+                    fontWeight: '600' 
+                  }}>
+                    <div>Mod Name</div>
+                    <div>Enabled</div>
+                    {!selectedInstalledMod && <div style={{ textAlign: 'right' }}>Provider / Actions</div>}
+                  </div>
+
+                  {installedMods.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dark)', fontSize: '14px' }}>
+                      No mods installed yet.
+                    </div>
+                  ) : (
+                    installedMods.map((mod) => {
+                      const isSelected = selectedInstalledMod?.fileName === mod.fileName;
+                      return (
+                        <div 
+                          key={mod.fileName}
+                          onClick={() => setSelectedInstalledMod(mod)}
+                          style={{ 
+                            display: 'grid', 
+                            gridTemplateColumns: selectedInstalledMod ? '3fr 1fr' : '3fr 1fr 1.5fr', 
+                            padding: '12px 10px', 
+                            borderRadius: '8px',
+                            fontSize: '13px',
+                            alignItems: 'center',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            border: isSelected ? '1px solid var(--primary)' : '1px solid transparent',
+                            backgroundColor: isSelected ? 'rgba(99, 102, 241, 0.08)' : 'rgba(255, 255, 255, 0.02)',
+                            boxShadow: isSelected ? '0 0 10px rgba(99, 102, 241, 0.12)' : 'none',
+                            borderLeft: mod.conflicts.length > 0 
+                              ? '3px solid var(--error)' 
+                              : isSelected 
+                              ? '3px solid var(--primary)' 
+                              : '3px solid transparent',
+                            marginBottom: '4px'
+                          }}
+                          className="glass-card"
+                        >
+                          <div>
+                            <div style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                              <span style={{ color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>{mod.name}</span>
+                              {modUpdates[mod.fileName] && (
+                                <span 
+                                  style={{ 
+                                    backgroundColor: 'rgba(16, 185, 129, 0.1)', 
+                                    border: '1px solid rgba(16, 185, 129, 0.3)', 
+                                    borderRadius: '4px', 
+                                    padding: '1px 5px', 
+                                    fontSize: '9px', 
+                                    color: 'var(--success)',
+                                    fontWeight: '600'
+                                  }}
+                                  title={`New version: ${modUpdates[mod.fileName].latestVersion}`}
+                                >
+                                  ✨ Update
+                                </span>
+                              )}
+                              {mod.associatedFolders && mod.associatedFolders.length > 0 && (
+                                <span 
+                                  style={{ 
+                                    backgroundColor: 'rgba(245, 158, 11, 0.1)', 
+                                    border: '1px solid rgba(245, 158, 11, 0.3)', 
+                                    borderRadius: '4px', 
+                                    padding: '1px 5px', 
+                                    fontSize: '9px', 
+                                    color: 'var(--primary)',
+                                    fontWeight: '500'
+                                  }}
+                                  title={`Associated folders: ${mod.associatedFolders.join(', ')}`}
+                                >
+                                  📂 {mod.associatedFolders.length} Data Folder{mod.associatedFolders.length > 1 ? 's' : ''}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ fontSize: '11px', color: 'var(--text-dark)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                              {mod.fileName}
+                            </div>
+                            {mod.conflicts.map((conf, cIdx) => (
+                              <div key={cIdx} style={{ color: 'var(--error)', fontSize: '11px', marginTop: '4px' }}>
+                                ⚠ {conf.details}
+                              </div>
+                            ))}
+                          </div>
+                          
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <input 
+                              type="checkbox"
+                              checked={mod.isActive}
+                              onChange={() => handleToggleMod(mod.fileName)}
+                              disabled={isViewer}
+                              style={{ cursor: isViewer ? 'not-allowed' : 'pointer', scale: '1.2', accentColor: 'var(--primary)' }}
+                            />
+                          </div>
+
+                          {!selectedInstalledMod && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                              <span className="badge badge-warning" style={{ fontSize: '10px', padding: '2px 8px' }}>
+                                {mod.modId !== 'manual' ? 'curseforge' : 'manual'}
+                              </span>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                {modUpdates[mod.fileName] && (
+                                  <button
+                                    onClick={() => handleUpdateMod(mod.fileName, modUpdates[mod.fileName])}
+                                    className="btn btn-primary"
+                                    style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', color: 'var(--success)' }}
+                                    disabled={isViewer || !!updatingMods[mod.fileName]}
+                                  >
+                                    Update
+                                  </button>
+                                )}
+                                <button 
+                                  onClick={() => handleDeleteMod(mod.fileName)} 
+                                  className="btn btn-secondary" 
+                                  style={{ padding: '3px 8px', fontSize: '11px', borderColor: 'rgba(244, 63, 94, 0.3)', color: 'var(--error)' }}
+                                  disabled={isViewer}
+                                >
+                                  Uninstall
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
                 </div>
               </div>
 
-              {/* Active Downloads HUD */}
-              {activeDownloads.length > 0 && (
-                <div style={{ marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                    <h4 style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>
-                      Background Downloads
-                    </h4>
-                    <span style={{ fontSize: '11px', backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', border: '1px solid rgba(99,102,241,0.3)', borderRadius: '10px', padding: '1px 7px', fontWeight: '600' }}>
-                      {activeDownloads.length}
-                    </span>
-                  </div>
+              {/* Right Side: Selected Mod Details Panel */}
+              {selectedInstalledMod && (
+                <div className="glass-panel animate-fade-in" style={{ height: 'fit-content', border: '1px solid var(--border)', position: 'relative', padding: '20px' }}>
+                  
+                  {/* Close button */}
+                  <button 
+                    onClick={() => setSelectedInstalledMod(null)}
+                    style={{
+                      position: 'absolute',
+                      top: '16px',
+                      right: '16px',
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--text-dark)',
+                      cursor: 'pointer',
+                      fontSize: '18px',
+                      transition: 'color 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => e.target.style.color = 'var(--primary)'}
+                    onMouseLeave={(e) => e.target.style.color = 'var(--text-dark)'}
+                    title="Close Panel"
+                  >
+                    ✕
+                  </button>
 
-                  {activeDownloads.map((dl) => {
-                    const isFailed = dl.status === 'failed';
-                    const isCompleted = dl.status === 'completed';
-                    const isVerifying = dl.status === 'verifying';
-                    const isActive = dl.status === 'downloading';
-
-                    const barColor = isFailed
-                      ? 'var(--error)'
-                      : isCompleted
-                      ? 'var(--success)'
-                      : 'var(--primary)';
-
-                    const badgeStyle = isFailed
-                      ? { backgroundColor: 'rgba(244,63,94,0.12)', color: 'var(--error)', border: '1px solid rgba(244,63,94,0.35)' }
-                      : isCompleted
-                      ? { backgroundColor: 'rgba(16,185,129,0.12)', color: 'var(--success)', border: '1px solid rgba(16,185,129,0.35)' }
-                      : isVerifying
-                      ? { backgroundColor: 'rgba(245,158,11,0.12)', color: 'var(--warning)', border: '1px solid rgba(245,158,11,0.35)' }
-                      : { backgroundColor: 'var(--primary-glow)', color: 'var(--primary)', border: '1px solid var(--primary-border)' };
-
-                    const formatBytes = (b) => {
-                      if (!b) return '0 B';
-                      if (b < 1024) return `${b} B`;
-                      if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
-                      return `${(b / (1024 * 1024)).toFixed(2)} MB`;
-                    };
-
-                    return (
-                      <div
-                        key={dl.downloadId}
-                        style={{
-                          backgroundColor: isFailed ? 'rgba(244,63,94,0.04)' : isCompleted ? 'rgba(16,185,129,0.04)' : 'var(--primary-glow)',
-                          border: `1px solid ${isFailed ? 'rgba(244,63,94,0.2)' : isCompleted ? 'rgba(16,185,129,0.2)' : 'var(--primary-border)'}`,
-                          borderRadius: '10px',
-                          padding: '12px 14px',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: '8px',
-                        }}
-                      >
-                        {/* Top row: filename + badge + dismiss */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          <span style={{ fontSize: '13px', fontWeight: '600', fontFamily: 'var(--font-mono)', color: 'var(--text-main)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {dl.fileName}
-                          </span>
-                          <span style={{ fontSize: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em', borderRadius: '6px', padding: '2px 8px', whiteSpace: 'nowrap', ...badgeStyle }}>
-                            {isVerifying ? 'Verifying' : isActive ? 'Downloading' : isCompleted ? 'Complete' : 'Failed'}
-                          </span>
-                          {(isFailed || isCompleted) && (
-                            <button
-                              onClick={() => setActiveDownloads(prev => prev.filter(d => d.downloadId !== dl.downloadId))}
-                              style={{ background: 'none', border: 'none', color: 'var(--text-dark)', cursor: 'pointer', fontSize: '14px', lineHeight: 1, padding: '0 2px', flexShrink: 0 }}
-                              title="Dismiss"
-                            >
-                              ✕
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Progress bar */}
-                        <div style={{ position: 'relative', width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-                          <div style={{
-                            width: `${dl.progress || 0}%`,
-                            height: '100%',
-                            backgroundColor: barColor,
-                            boxShadow: isFailed ? 'none' : `0 0 8px ${barColor}`,
-                            borderRadius: '3px',
-                            transition: 'width 0.4s ease-in-out',
-                          }} />
-                          {isActive && (
-                            <div style={{
-                              position: 'absolute',
-                              top: 0, left: 0,
-                              width: '100%', height: '100%',
-                              background: 'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%)',
-                              animation: 'shimmer 1.4s infinite',
-                            }} />
-                          )}
-                        </div>
-
-                        {/* Bottom row: progress details or error */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '11px' }}>
-                          {isFailed ? (
-                            <span style={{ color: 'var(--error)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                              <span>⚠</span>
-                              <span>{dl.error || 'Download failed. Check your connection or URL.'}</span>
-                            </span>
-                          ) : (
-                            <span style={{ color: 'var(--text-dark)' }}>
-                              {isCompleted
-                                ? `✓ ${formatBytes(dl.downloadedBytes)} — installed successfully`
-                                : isVerifying
-                                ? 'Verifying SHA1 checksum...'
-                                : dl.totalBytes > 0
-                                ? `${formatBytes(dl.downloadedBytes)} / ${formatBytes(dl.totalBytes)}`
-                                : `${formatBytes(dl.downloadedBytes)} downloaded`}
-                            </span>
-                          )}
-                          <span style={{ color: isFailed ? 'var(--error)' : isCompleted ? 'var(--success)' : 'var(--primary)', fontWeight: '700', fontVariantNumeric: 'tabular-nums' }}>
-                            {dl.progress || 0}%
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-
-
-              {/* Installed List */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 2fr', padding: '8px', color: 'var(--text-muted)', fontSize: '12px', borderBottom: '1px solid var(--border)', fontWeight: '600' }}>
-                  <div>Mod Name</div>
-                  <div>Enabled</div>
-                  <div>Provider</div>
-                  <div style={{ textAlign: 'right' }}>Actions</div>
-                </div>
-
-                {installedMods.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '32px', color: 'var(--text-dark)', fontSize: '14px' }}>
-                    No mods installed yet.
-                  </div>
-                ) : (
-                  installedMods.map((mod) => (
-                    <div 
-                      key={mod.fileName} 
-                      style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: '2fr 1fr 1fr 2fr', 
-                        padding: '12px 8px', 
-                        borderRadius: '6px',
-                        fontSize: '13px',
-                        alignItems: 'center',
-                        borderLeft: mod.conflicts.length > 0 ? '3px solid var(--error)' : 'none'
-                      }}
-                      className="glass-card"
-                    >
-                      <div>
-                        <div style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <span>{mod.name}</span>
-                          {mod.associatedFolders && mod.associatedFolders.length > 0 && (
-                            <span 
-                              style={{ 
-                                backgroundColor: 'rgba(245, 158, 11, 0.1)', 
-                                border: '1px solid rgba(245, 158, 11, 0.3)', 
-                                borderRadius: '4px', 
-                                padding: '2px 6px', 
-                                fontSize: '10px', 
-                                color: 'var(--primary)',
-                                fontWeight: '500'
-                              }}
-                              title={`Associated data folders: ${mod.associatedFolders.join(', ')}`}
-                            >
-                              📂 {mod.associatedFolders.length} Data Folder{mod.associatedFolders.length > 1 ? 's' : ''}
-                            </span>
-                          )}
-                        </div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-dark)', fontFamily: 'var(--font-mono)' }}>{mod.fileName}</div>
-                        {mod.conflicts.map((conf, cIdx) => (
-                          <div key={cIdx} style={{ color: 'var(--error)', fontSize: '11px', marginTop: '4px' }}>
-                            ⚠ {conf.details}
+                  {loadingInstalledModDetails ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px', gap: '12px' }}>
+                      <div className="spinner" style={{ width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.05)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      <span style={{ fontSize: '12px', color: 'var(--text-dark)' }}>Fetching CurseForge details...</span>
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                      
+                      {/* Logo + Header */}
+                      <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
+                        {selectedInstalledModDetails?.logoUrl ? (
+                          <img 
+                            src={selectedInstalledModDetails.logoUrl} 
+                            alt={selectedInstalledMod.name} 
+                            style={{ width: '64px', height: '64px', borderRadius: '12px', objectFit: 'cover', border: '1px solid var(--border)' }} 
+                          />
+                        ) : (
+                          <div style={{ width: '64px', height: '64px', borderRadius: '12px', backgroundColor: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' }}>
+                            📦
                           </div>
-                        ))}
+                        )}
+                        <div style={{ flex: 1, paddingRight: '24px' }}>
+                          <h4 style={{ fontSize: '16px', fontWeight: 'bold', color: 'var(--primary)', margin: 0, fontFamily: 'var(--font-heading)' }}>
+                            {selectedInstalledModDetails?.name || selectedInstalledMod.name}
+                          </h4>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                            <span className="badge badge-secondary" style={{ fontSize: '10px', padding: '1px 6px' }}>
+                              {selectedInstalledMod.modId !== 'manual' ? 'CurseForge' : 'Manual Install'}
+                            </span>
+                            <span style={{ fontSize: '11px', color: selectedInstalledMod.isActive ? 'var(--success)' : 'var(--text-dark)', fontWeight: '600' }}>
+                              ● {selectedInstalledMod.isActive ? 'Active' : 'Disabled'}
+                            </span>
+                          </div>
+                          {selectedInstalledModDetails?.author && (
+                            <div style={{ fontSize: '11px', color: 'var(--text-dark)', marginTop: '4px' }}>
+                              By: <strong style={{ color: 'var(--text-muted)' }}>{selectedInstalledModDetails.author}</strong>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                      <div>
-                        <input 
-                          type="checkbox"
-                          checked={mod.isActive}
-                          onChange={() => handleToggleMod(mod.fileName)}
-                          disabled={isViewer}
-                          style={{ cursor: isViewer ? 'not-allowed' : 'pointer', scale: '1.2', accentColor: 'var(--primary)' }}
-                        />
+
+                      {/* Technical Info */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', backgroundColor: 'rgba(0,0,0,0.15)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.03)', fontSize: '12px' }}>
+                        <div>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>File Size</span>
+                          <div style={{ fontWeight: '600', color: 'var(--text-main)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                            {(selectedInstalledMod.size / (1024 * 1024)).toFixed(2)} MB
+                          </div>
+                        </div>
+                        <div>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Date Updated</span>
+                          <div style={{ fontWeight: '600', color: 'var(--text-main)', marginTop: '2px' }}>
+                            {new Date(selectedInstalledMod.mtime).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          </div>
+                        </div>
+                        <div style={{ gridColumn: 'span 2' }}>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>Local Path</span>
+                          <div style={{ fontWeight: '500', color: 'var(--text-dark)', fontFamily: 'var(--font-mono)', marginTop: '2px', wordBreak: 'break-all' }}>
+                            /mods/{selectedInstalledMod.fileName}
+                          </div>
+                        </div>
                       </div>
-                      <div style={{ color: 'var(--text-muted)' }}>
-                        <span className="badge badge-warning" style={{ fontSize: '10px', padding: '2px 8px' }}>
-                          {mod.modId !== 'manual' ? 'curseforge' : 'manual'}
+
+                      {/* Description */}
+                      <div style={{ fontSize: '13px', lineHeight: 1.5 }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '6px' }}>
+                          Summary
                         </span>
+                        <p style={{ color: 'var(--text-main)', margin: 0 }}>
+                          {selectedInstalledModDetails?.summary || selectedInstalledModDetails?.description || 'No summary details available for this manually installed mod.'}
+                        </p>
                       </div>
-                      <div style={{ textAlign: 'right' }}>
+
+                      {/* Active Conflicts warning box */}
+                      {selectedInstalledMod.conflicts.length > 0 && (
+                        <div style={{ border: '1px solid rgba(244, 63, 94, 0.25)', backgroundColor: 'rgba(244, 63, 94, 0.04)', borderRadius: '8px', padding: '12px', fontSize: '12px' }}>
+                          <strong style={{ color: 'var(--error)', display: 'block', marginBottom: '6px' }}>⚠ Active Conflicts</strong>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            {selectedInstalledMod.conflicts.map((conf, cIdx) => (
+                              <div key={cIdx} style={{ color: 'var(--text-main)' }}>
+                                {conf.details}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Associated Folders info */}
+                      {selectedInstalledMod.associatedFolders && selectedInstalledMod.associatedFolders.length > 0 && (
+                        <div style={{ border: '1px solid rgba(245, 158, 11, 0.2)', backgroundColor: 'rgba(245, 158, 11, 0.03)', borderRadius: '8px', padding: '12px', fontSize: '12px' }}>
+                          <strong style={{ color: 'var(--primary)', display: 'block', marginBottom: '6px' }}>📂 Associated Directories</strong>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontFamily: 'var(--font-mono)', color: 'var(--text-dark)' }}>
+                            {selectedInstalledMod.associatedFolders.map((folder, fIdx) => (
+                              <div key={fIdx}>/ {folder}</div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Configurations section */}
+                      <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                        <span style={{ color: 'var(--text-muted)', fontWeight: '600', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: '8px' }}>
+                          Configuration Files
+                        </span>
+                        {fetchingConfigs[selectedInstalledMod.fileName] ? (
+                          <div style={{ fontSize: '12px', color: 'var(--text-dark)' }}>Scanning folders...</div>
+                        ) : !modConfigsList[selectedInstalledMod.fileName] || modConfigsList[selectedInstalledMod.fileName].length === 0 ? (
+                          <div style={{ fontSize: '12px', color: 'var(--text-dark)', padding: '10px', backgroundColor: 'rgba(255,255,255,0.01)', borderRadius: '6px', border: '1px dashed var(--border)' }}>
+                            No editable configurations discovered.
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto', paddingRight: '4px' }}>
+                            {modConfigsList[selectedInstalledMod.fileName].map((cfg) => (
+                              <div 
+                                key={cfg.relPath}
+                                style={{ 
+                                  display: 'flex', 
+                                  justifyContent: 'space-between', 
+                                  alignItems: 'center', 
+                                  padding: '8px 10px', 
+                                  backgroundColor: 'rgba(255, 255, 255, 0.01)', 
+                                  borderRadius: '6px',
+                                  fontSize: '12px',
+                                  border: '1px solid var(--border)'
+                                }}
+                              >
+                                <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minWidth: 0, paddingRight: '12px' }}>
+                                  <strong style={{ color: 'var(--text-main)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{cfg.name}</strong>
+                                  <span style={{ fontSize: '10px', color: 'var(--text-dark)', fontFamily: 'var(--font-mono)', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{cfg.relPath}</span>
+                                </div>
+                                <button
+                                  onClick={() => handleEditConfig(cfg)}
+                                  className="btn btn-primary"
+                                  style={{ padding: '3px 8px', fontSize: '11px', flexShrink: 0 }}
+                                >
+                                  Edit
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Management Buttons */}
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '8px', borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                        <button
+                          onClick={() => handleToggleMod(selectedInstalledMod.fileName)}
+                          className="btn btn-secondary"
+                          style={{ flex: 1, fontSize: '12px', padding: '8px 12px' }}
+                          disabled={isViewer}
+                        >
+                          {selectedInstalledMod.isActive ? '⏸ Disable' : '▶ Enable'}
+                        </button>
+
+                        {modUpdates[selectedInstalledMod.fileName] && (
+                          <button
+                            onClick={() => handleUpdateMod(selectedInstalledMod.fileName, modUpdates[selectedInstalledMod.fileName])}
+                            className="btn btn-primary"
+                            style={{ flex: 1, fontSize: '12px', padding: '8px 12px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', color: 'var(--success)' }}
+                            disabled={isViewer || !!updatingMods[selectedInstalledMod.fileName]}
+                          >
+                            {updatingMods[selectedInstalledMod.fileName] ? 'Updating...' : '⚡ Update'}
+                          </button>
+                        )}
+
                         <button 
-                          onClick={() => handleDeleteMod(mod.fileName)} 
+                          onClick={() => handleDeleteMod(selectedInstalledMod.fileName)} 
                           className="btn btn-secondary" 
-                          style={{ padding: '4px 12px', fontSize: '12px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
+                          style={{ flex: 1, fontSize: '12px', padding: '8px 12px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
                           disabled={isViewer}
                         >
                           Uninstall
                         </button>
                       </div>
+
                     </div>
-                  ))
-                )}
-              </div>
+                  )}
+
+                </div>
+              )}
+
             </div>
 
             {/* Install New Mods Browser */}
@@ -2287,7 +2715,7 @@ export default function ServerDetail() {
               <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '20px' }}>
                 <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', marginBottom: '12px' }}>Mod Marketplace Discovery</h3>
                 
-                <form onSubmit={handleSearchMods} style={{ display: 'flex', gap: '12px' }}>
+                <form onSubmit={handleSearchMods} style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                   <select
                     value={modsSource}
                     onChange={(e) => setModsSource(e.target.value)}
@@ -2301,16 +2729,35 @@ export default function ServerDetail() {
                     }}
                   >
                     <option value="curseforge">CurseForge (Auto Install)</option>
-                    <option value="nexus">Nexus Mods (Manual Install Info)</option>
+                    <option value="nexus">Nexus Mods (Manual Info)</option>
+                  </select>
+
+                  <select
+                    value={modsSortBy}
+                    onChange={(e) => setModsSortBy(e.target.value)}
+                    style={{
+                      backgroundColor: 'var(--bg-dark)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 16px',
+                      borderRadius: '8px',
+                      fontSize: '13px'
+                    }}
+                  >
+                    <option value="featured">⭐ Featured</option>
+                    <option value="popularity">🔥 Popularity</option>
+                    <option value="latest_released">📅 Latest Released</option>
+                    <option value="latest_updated">🔄 Latest Updated</option>
+                    <option value="name">🔤 Alphabetical</option>
                   </select>
 
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Search mods feed... (e.g. essentials, pack)"
+                    placeholder="Search mods... (e.g. essentials, map)"
                     value={modsSearchQuery}
                     onChange={(e) => setModsSearchQuery(e.target.value)}
-                    style={{ flex: 1 }}
+                    style={{ flex: 1, minWidth: '150px' }}
                   />
 
                   <button type="submit" className="btn btn-primary" disabled={searchingRemote}>
@@ -2323,7 +2770,18 @@ export default function ServerDetail() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                 {/* Mod Cards List */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '500px', overflowY: 'auto', paddingRight: '8px' }}>
-                  {remoteMods.length === 0 ? (
+                  {remoteSearchError ? (
+                    <div style={{ border: '1px solid rgba(245, 158, 11, 0.25)', backgroundColor: 'rgba(245, 158, 11, 0.04)', borderRadius: '10px', padding: '24px', textAlign: 'center', display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '32px' }}>⚠️</span>
+                      <strong style={{ color: 'var(--primary)', fontSize: '15px' }}>Discovery Service Offline</strong>
+                      <p style={{ color: 'var(--text-main)', fontSize: '13px', margin: 0, lineHeight: 1.5 }}>
+                        {remoteSearchError}
+                      </p>
+                      <a href="#/settings" className="btn btn-primary" style={{ display: 'inline-block', textDecoration: 'none', padding: '6px 16px', fontSize: '13px', marginTop: '4px' }}>
+                        ⚙️ Configure API Keys
+                      </a>
+                    </div>
+                  ) : remoteMods.length === 0 ? (
                     <div style={{ color: 'var(--text-dark)', fontSize: '14px', padding: '16px', textAlign: 'center' }}>
                       Enter queries or select database repositories to search mods.
                     </div>
@@ -2352,8 +2810,11 @@ export default function ServerDetail() {
                           <p style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                             {mod.summary}
                           </p>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-dark)', marginTop: '8px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-dark)', marginTop: '8px', flexWrap: 'wrap', gap: '8px' }}>
                             <span>By: {mod.author}</span>
+                            {mod.updatedAt && (
+                              <span>Updated: {new Date(mod.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                            )}
                             <span>Downloads: {mod.downloads.toLocaleString()}</span>
                           </div>
                         </div>
@@ -2391,7 +2852,15 @@ export default function ServerDetail() {
                               <div key={file.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', border: '1px solid var(--border)', borderRadius: '6px', backgroundColor: 'var(--bg-panel)', fontSize: '12px' }}>
                                 <div>
                                   <div style={{ fontWeight: '600' }}>{file.displayName}</div>
-                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>{file.fileName} ({(file.fileLength / (1024 * 1024)).toFixed(2)} MB)</div>
+                                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '2px' }}>
+                                    <span>{file.fileName}</span>
+                                    <span>({(file.fileLength / (1024 * 1024)).toFixed(2)} MB)</span>
+                                    {file.releaseDate && (
+                                      <span style={{ color: 'var(--text-dark)' }}>
+                                        Released: {new Date(file.releaseDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 
                                 {selectedMod.source === 'nexus' ? (
@@ -4253,6 +4722,39 @@ export default function ServerDetail() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* In-Browser Code File Editor Overlay */}
+      {editingFile && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: '800px', width: '90%' }}>
+            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px' }}>
+              Edit File: {editingFile.name}
+            </h3>
+            <textarea
+              value={editingContent}
+              onChange={(e) => setEditingContent(e.target.value)}
+              style={{
+                width: '100%',
+                height: '400px',
+                backgroundColor: '#050608',
+                color: 'var(--text-main)',
+                border: '1px solid var(--border)',
+                borderRadius: '8px',
+                padding: '16px',
+                fontFamily: 'var(--font-mono)',
+                fontSize: '13px',
+                resize: 'vertical',
+                outline: 'none',
+                marginBottom: '16px'
+              }}
+            />
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
+              <button onClick={() => setEditingFile(null)} className="btn btn-secondary">Cancel</button>
+              <button onClick={handleSaveFile} className="btn btn-primary" disabled={isViewer}>Save Changes</button>
+            </div>
           </div>
         </div>
       )}

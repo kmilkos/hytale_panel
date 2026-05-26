@@ -28,7 +28,7 @@ function getActiveDownloads(serverId) {
 }
 
 async function downloadModFile(db, serverId, downloadUrl, fileName, options = {}) {
-  const { curseforgeModId = null, curseforgeFileId = null, sha1 = null } = options;
+  const { curseforgeModId = null, curseforgeFileId = null, sha1 = null, deleteOldFileName = null } = options;
 
   // 1. Resolve server and mods folder
   const server = db.prepare('SELECT install_path FROM servers WHERE id = ?').get(serverId);
@@ -149,6 +149,20 @@ async function downloadModFile(db, serverId, downloadUrl, fileName, options = {}
 
       // Run conflict detection scanner immediately
       await detectConflicts(db, serverId);
+
+      // Clean up old mod file if this is an update
+      if (deleteOldFileName) {
+        const oldPath = path.join(server.install_path, 'mods', deleteOldFileName);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+          db.prepare('DELETE FROM installed_mods WHERE server_id = ? AND file_name = ?')
+            .run(serverId, deleteOldFileName);
+          logger.info(`Deleted old mod file during update: ${deleteOldFileName}`);
+          
+          // Re-detect conflicts to clear resolved duplicate mod IDs
+          await detectConflicts(db, serverId);
+        }
+      }
 
       downloadState.status = 'completed';
       downloadState.progress = 100;

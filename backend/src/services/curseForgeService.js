@@ -79,7 +79,7 @@ function normalizeMod(mod) {
   };
 }
 
-async function searchMods(db, { query = '', categoryId = null, offset = 0, limit = 20 }) {
+async function searchMods(db, { query = '', categoryId = null, offset = 0, limit = 20, sortBy = 'featured' }) {
   let endpoint = `/mods/search?gameId=${GAME_ID}&index=${offset}&pageSize=${limit}`;
   if (query) {
     endpoint += `&searchFilter=${encodeURIComponent(query)}`;
@@ -87,6 +87,25 @@ async function searchMods(db, { query = '', categoryId = null, offset = 0, limit
   if (categoryId) {
     endpoint += `&classId=${categoryId}`;
   }
+  
+  let sortField = 1; // Featured
+  let sortOrder = 'desc';
+  
+  if (sortBy === 'popularity') {
+    sortField = 6; // TotalDownloads
+    sortOrder = 'desc';
+  } else if (sortBy === 'latest_updated') {
+    sortField = 3; // LastUpdated
+    sortOrder = 'desc';
+  } else if (sortBy === 'latest_released') {
+    sortField = 1; // Featured / Latest Released
+    sortOrder = 'desc';
+  } else if (sortBy === 'name') {
+    sortField = 4; // Name
+    sortOrder = 'asc';
+  }
+  
+  endpoint += `&sortField=${sortField}&sortOrder=${sortOrder}`;
   
   const res = await requestCF(db, endpoint);
   return (res.data || []).map(normalizeMod);

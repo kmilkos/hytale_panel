@@ -144,7 +144,7 @@ function cacheMods(db, mods) {
 }
 
 // Search and list mods
-async function searchMods(db, { query = '', categoryId = null, offset = 0, limit = 20 }) {
+async function searchMods(db, { query = '', categoryId = null, offset = 0, limit = 20, sortBy = 'featured' }) {
   const apiKey = getApiKey(db);
   let modsData = [];
 
@@ -192,6 +192,17 @@ async function searchMods(db, { query = '', categoryId = null, offset = 0, limit
       m.summary.toLowerCase().includes(q) || 
       m.description.toLowerCase().includes(q)
     );
+  }
+
+  // Sort results
+  if (sortBy) {
+    if (sortBy === 'popularity') {
+      normalized.sort((a, b) => b.downloads - a.downloads);
+    } else if (sortBy === 'latest_updated' || sortBy === 'latest_released') {
+      normalized.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+    } else if (sortBy === 'name') {
+      normalized.sort((a, b) => a.name.localeCompare(b.name));
+    }
   }
 
   // Paginate
