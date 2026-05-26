@@ -200,6 +200,16 @@ const migrations = [
         CREATE INDEX IF NOT EXISTS idx_system_metrics_recorded ON system_metrics(recorded_at);
       `);
     }
+  },
+  {
+    name: '004_add_server_type',
+    up: (db) => {
+      try {
+        db.exec("ALTER TABLE servers ADD COLUMN server_type TEXT DEFAULT 'Survival'");
+      } catch (err) {
+        logger.warn('Failed to add server_type column, it might already exist:', err.message);
+      }
+    }
   }
 ];
 

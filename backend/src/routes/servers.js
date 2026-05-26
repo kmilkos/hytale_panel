@@ -27,6 +27,8 @@ const createServerSchema = z.object({
   slug: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/, 'Slug must be alphanumeric/dashes only (max 63 chars).').optional(),
   description: z.string().optional(),
   port: z.number().int().min(1024).max(65535).optional(),
+  autostart: z.union([z.boolean(), z.number().int().min(0).max(1)]).optional(),
+  server_type: z.enum(['Survival', 'Adventure/RPG', 'Creative', 'PvP', 'Minigames', 'Roleplay', 'Social', 'Sandbox', 'Other']).optional(),
 });
 
 const updateServerSchema = z.object({
@@ -39,6 +41,7 @@ const updateServerSchema = z.object({
   restart_schedule: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Schedule must be in HH:mm format.').or(z.literal('')).nullable().optional(),
   webhook_url: z.string().url().or(z.literal('')).nullable().optional(),
   config_json: z.string().optional(),
+  server_type: z.enum(['Survival', 'Adventure/RPG', 'Creative', 'PvP', 'Minigames', 'Roleplay', 'Social', 'Sandbox', 'Other']).optional(),
 });
 
 module.exports = function(db) {
@@ -62,7 +65,26 @@ module.exports = function(db) {
           ORDER BY s.name ASC
         `).all(req.user.sub);
       }
-      const servers = rows.map(rowToServer);
+      const servers = rows.map(rowToServer).map(srv => {
+        let latestMetrics = null;
+        if (srv.isRunning) {
+          try {
+            latestMetrics = db.prepare(`
+              SELECT cpu_percentage, ram_bytes, player_count 
+              FROM server_metrics 
+              WHERE server_id = ? 
+              ORDER BY id DESC 
+              LIMIT 1
+            `).get(srv.id);
+          } catch (err) {
+            // Fallback in case table isn't populated or errors out
+          }
+        }
+        return {
+          ...srv,
+          metrics: latestMetrics || { cpu_percentage: 0, ram_bytes: 0, player_count: 0 }
+        };
+      });
       res.json(servers);
     } catch (err) {
       next(err);
@@ -116,12 +138,14 @@ module.exports = function(db) {
       }
 
       const stmt = db.prepare(`
-        INSERT INTO servers (name, slug, description, install_path, port, status)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT INTO servers (name, slug, description, install_path, port, status, autostart, server_type)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       const port = validated.port || 25565;
-      const result = stmt.run(validated.name, validated.slug, validated.description || '', installPath, port, 'uninstalled');
+      const autostartVal = (validated.autostart === true || validated.autostart === 1) ? 1 : 0;
+      const serverTypeVal = validated.server_type || 'Survival';
+      const result = stmt.run(validated.name, validated.slug, validated.description || '', installPath, port, 'uninstalled', autostartVal, serverTypeVal);
       
       const serverId = result.lastInsertRowid;
 

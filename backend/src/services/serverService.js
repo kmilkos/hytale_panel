@@ -218,13 +218,32 @@ function rowToServer(row) {
     ...row,
     autostart: row.autostart === 1,
     isRunning: activeProcesses.has(row.id),
+    onlinePlayers: getOnlinePlayers(row.id),
+    server_type: row.server_type || 'Survival',
   };
+}
+
+function checkPortBusy(port) {
+  return new Promise((resolve) => {
+    const net = require('net');
+    const tester = net.createServer()
+      .once('error', () => resolve(true))
+      .once('listening', () => tester.close(() => resolve(false)))
+      .listen(port, '0.0.0.0');
+  });
 }
 
 async function startServer(db, id) {
   const server = getServer(db, id);
   if (server.isRunning) {
     throw new HttpError(400, 'Server is already running.');
+  }
+
+  // Pre-launch TCP Port Conflict Checking
+  const serverPort = server.port || 25565;
+  const isPortBusy = await checkPortBusy(serverPort);
+  if (isPortBusy) {
+    throw new HttpError(400, `Port ${serverPort} is already in use by another process. Please stop the conflicting process or assign a different port.`);
   }
 
   if (!fs.existsSync(server.install_path)) {

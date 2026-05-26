@@ -1,12 +1,36 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiRequest, getUser, clearToken } from '../utils/api';
+import { 
+  Server, 
+  Activity, 
+  Users, 
+  Cpu, 
+  HardDrive, 
+  Search, 
+  LayoutGrid, 
+  List as ListIcon, 
+  Play, 
+  Square, 
+  RotateCcw, 
+  Plus, 
+  LogOut, 
+  Check, 
+  X,
+  Gauge
+} from 'lucide-react';
 
 export default function Dashboard() {
   const [servers, setServers] = useState([]);
+  const [systemStats, setSystemStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [user, setUser] = useState(null);
+  
+  // Custom Controls hooks
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [viewLayout, setViewLayout] = useState('grid');
   
   // Create Server Modal State
   const [showModal, setShowModal] = useState(false);
@@ -14,6 +38,7 @@ export default function Dashboard() {
   const [description, setDescription] = useState('');
   const [port, setPort] = useState('25565');
   const [autostart, setAutostart] = useState(false);
+  const [serverType, setServerType] = useState('Survival');
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -26,6 +51,15 @@ export default function Dashboard() {
     } else {
       setUser(curUser);
       fetchServers();
+      fetchSystemStats();
+
+      // Poll server status and metrics every 10 seconds in the background
+      const intervalId = setInterval(() => {
+        fetchServers();
+        fetchSystemStats();
+      }, 10000);
+
+      return () => clearInterval(intervalId);
     }
   }, [navigate]);
 
@@ -38,6 +72,15 @@ export default function Dashboard() {
       setError(err.message || 'Failed to fetch servers list.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchSystemStats = async () => {
+    try {
+      const stats = await apiRequest('/system/stats');
+      setSystemStats(stats);
+    } catch (err) {
+      console.error('Failed to fetch system stats:', err);
     }
   };
 
@@ -56,7 +99,8 @@ export default function Dashboard() {
         name,
         description,
         port: parseInt(port, 10),
-        autostart: autostart ? 1 : 0
+        autostart: !!autostart,
+        server_type: serverType
       };
 
       await apiRequest('/servers', {
@@ -69,10 +113,12 @@ export default function Dashboard() {
       setDescription('');
       setPort('25565');
       setAutostart(false);
+      setServerType('Survival');
       setShowModal(false);
       
-      // Refresh list
+      // Refresh listing
       fetchServers();
+      fetchSystemStats();
     } catch (err) {
       setCreateError(err.message || 'Failed to create server.');
     } finally {
@@ -88,39 +134,79 @@ export default function Dashboard() {
         method: 'POST',
         body: { action }
       });
-      // Poll/refresh servers listing
+      // Poll/refresh listing instantly
       fetchServers();
+      fetchSystemStats();
     } catch (err) {
       alert(`Action "${action}" failed: ${err.message}`);
     }
   };
 
+  // Helper formatting logic
+  const formatRAM = (bytes) => {
+    if (!bytes || isNaN(bytes) || bytes === 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    if (mb >= 1000) {
+      return `${(mb / 1024).toFixed(1)} GB`;
+    }
+    return `${Math.round(mb)} MB`;
+  };
+
+  const formatUptime = (seconds) => {
+    if (!seconds || isNaN(seconds)) return '0m';
+    const d = Math.floor(seconds / (24 * 3600));
+    const h = Math.floor((seconds % (24 * 3600)) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+    return parts.join(' ');
+  };
+
+  // Filtering criteria
+  const filteredServers = servers.filter((srv) => {
+    const matchesSearch = 
+      srv.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (srv.description && srv.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (srv.port && String(srv.port).includes(searchTerm));
+    
+    if (statusFilter === 'all') return matchesSearch;
+    return srv.status === statusFilter && matchesSearch;
+  });
+
+  const totalPlayersCount = servers.reduce((acc, srv) => acc + (srv.onlinePlayers?.length || 0), 0);
+  const activeServersCount = servers.filter((srv) => srv.isRunning).length;
+
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-dark)' }}>
       {/* Header */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 32px',
-        backgroundColor: 'var(--bg-panel)',
-        borderBottom: '1px solid var(--border)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <h1 className="text-glow-primary" style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', fontWeight: 'bold', margin: 0 }}>
-            Hytale Clusters
-          </h1>
-          <nav style={{ display: 'flex', gap: '16px' }}>
-            <Link to="/" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Dashboard</Link>
-            <Link to="/metrics" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>System Metrics</Link>
-            <Link to="/settings" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Settings</Link>
+      <header className="fancy-header">
+        <div className="fancy-nav-container">
+          <nav className="fancy-nav">
+            <Link to="/" className="fancy-nav-item active">Dashboard</Link>
+            <Link to="/metrics" className="fancy-nav-item">System Metrics</Link>
+            <Link to="/settings" className="fancy-nav-item">Settings</Link>
           </nav>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-            Logged in as <strong style={{ color: 'var(--text-main)' }}>{user?.username}</strong> ({user?.role})
-          </span>
-          <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+
+        <div className="fancy-title-container">
+          <h1 className="fancy-title">
+            <span className="fancy-title-brackets">[</span>
+            Hytale Clusters
+            <span className="fancy-title-brackets">]</span>
+          </h1>
+        </div>
+
+        <div className="fancy-right-container">
+          <div className="fancy-user-badge">
+            <span style={{ color: 'var(--text-muted)' }}>Logged in as</span>
+            <strong style={{ color: 'var(--text-main)' }}>{user?.username}</strong>
+            <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 6px' }}>{user?.role}</span>
+          </div>
+          <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+            <LogOut size={14} style={{ marginRight: '6px' }} />
             Sign Out
           </button>
         </div>
@@ -128,14 +214,128 @@ export default function Dashboard() {
 
       {/* Main Body */}
       <main style={{ flex: 1, padding: '32px', maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
+        
+        {/* Dynamic Cluster Stat summary cards at top */}
+        <section className="cluster-metrics-summary">
+          <div className="mini-stat-card">
+            <div className="mini-stat-icon-wrapper">
+              <Server size={20} />
+            </div>
+            <div className="mini-stat-data">
+              <div className="mini-stat-label">Total Clusters</div>
+              <div className="mini-stat-value">{servers.length} profiles</div>
+            </div>
+          </div>
+
+          <div className="mini-stat-card">
+            <div className="mini-stat-icon-wrapper" style={{ color: activeServersCount > 0 ? 'var(--success)' : 'inherit', background: activeServersCount > 0 ? 'var(--success-glow)' : 'inherit' }}>
+              <Activity size={20} className={activeServersCount > 0 ? 'status-dot active' : ''} />
+            </div>
+            <div className="mini-stat-data">
+              <div className="mini-stat-label">Online Nodes</div>
+              <div className="mini-stat-value">{activeServersCount} active</div>
+            </div>
+          </div>
+
+          <div className="mini-stat-card">
+            <div className="mini-stat-icon-wrapper" style={{ color: totalPlayersCount > 0 ? 'var(--secondary)' : 'inherit', background: totalPlayersCount > 0 ? 'var(--secondary-glow)' : 'inherit' }}>
+              <Users size={20} />
+            </div>
+            <div className="mini-stat-data">
+              <div className="mini-stat-label">Active Players</div>
+              <div className="mini-stat-value">{totalPlayersCount} online</div>
+            </div>
+          </div>
+
+          <div className="mini-stat-card">
+            <div className="mini-stat-icon-wrapper">
+              <Cpu size={20} />
+            </div>
+            <div className="mini-stat-data">
+              <div className="mini-stat-label">Host CPU / RAM</div>
+              <div className="mini-stat-value">
+                {systemStats ? `${systemStats.memory?.percentage || 0}% RAM` : 'Connecting...'}
+              </div>
+            </div>
+            {systemStats && (
+              <div style={{ position: 'absolute', right: '12px', top: '12px', fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                {formatUptime(systemStats.uptime)}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* Header Action Bar */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
           <div>
             <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '24px', fontWeight: 'bold' }}>Server Instances</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Manage and configure active Hytale worlds</p>
           </div>
           <button onClick={() => setShowModal(true)} className="btn btn-primary">
-            + New Server
+            <Plus size={16} />
+            New Server Profile
           </button>
+        </div>
+
+        {/* Dashboard filter & control bar */}
+        <div className="dashboard-controls-bar">
+          <div className="search-input-wrapper">
+            <Search className="search-input-icon" size={16} />
+            <input
+              type="text"
+              placeholder="Search by name, description or port..."
+              className="form-input"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+
+          <div className="filter-pills-container">
+            <button 
+              className={`filter-pill ${statusFilter === 'all' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('all')}
+            >
+              All
+            </button>
+            <button 
+              className={`filter-pill ${statusFilter === 'running' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('running')}
+            >
+              <span className="status-dot active" style={{ position: 'static', marginRight: '4px' }}></span>
+              Running
+            </button>
+            <button 
+              className={`filter-pill ${statusFilter === 'stopped' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('stopped')}
+            >
+              <span className="status-dot stopped" style={{ position: 'static', marginRight: '4px' }}></span>
+              Stopped
+            </button>
+            <button 
+              className={`filter-pill ${statusFilter === 'uninstalled' ? 'active' : ''}`}
+              onClick={() => setStatusFilter('uninstalled')}
+            >
+              <span className="status-dot warning" style={{ position: 'static', marginRight: '4px' }}></span>
+              Uninstalled
+            </button>
+          </div>
+
+          <div className="layout-toggle-container">
+            <button 
+              className={`layout-toggle-btn ${viewLayout === 'grid' ? 'active' : ''}`}
+              title="Grid View"
+              onClick={() => setViewLayout('grid')}
+            >
+              <LayoutGrid size={16} />
+            </button>
+            <button 
+              className={`layout-toggle-btn ${viewLayout === 'list' ? 'active' : ''}`}
+              title="Dense List View"
+              onClick={() => setViewLayout('list')}
+            >
+              <ListIcon size={16} />
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -153,83 +353,270 @@ export default function Dashboard() {
 
         {loading ? (
           <div style={{ textAlign: 'center', padding: '64px', color: 'var(--text-muted)' }}>
-            Loading server instances...
+            <Activity size={24} style={{ animation: 'spinSlow 2s linear infinite', marginBottom: '12px' }} />
+            <div>Loading server instances...</div>
           </div>
-        ) : servers.length === 0 ? (
+        ) : filteredServers.length === 0 ? (
           <div className="glass-panel" style={{ textAlign: 'center', padding: '64px' }}>
-            <p style={{ color: 'var(--text-muted)', fontSize: '16px', marginBottom: '16px' }}>No servers configured yet.</p>
-            <button onClick={() => setShowModal(true)} className="btn btn-accent">
-              Create Your First Server
+            <p style={{ color: 'var(--text-muted)', fontSize: '16px', marginBottom: '16px' }}>No servers match your filters.</p>
+            <button onClick={() => { setSearchTerm(''); setStatusFilter('all'); setShowModal(true); }} className="btn btn-accent">
+              Create a Server Profile
             </button>
           </div>
-        ) : (
+        ) : viewLayout === 'grid' ? (
+          /* Grid View Layout */
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
             gap: '24px'
           }}>
-            {servers.map((srv) => (
-              <div 
-                key={srv.id} 
-                onClick={() => navigate(`/servers/${srv.id}`)}
-                className="glass-card animate-fade-in"
-                style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '200px' }}
-              >
-                <div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
-                    <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--text-main)' }}>
-                      {srv.name}
-                    </h3>
-                    <span className={`badge ${srv.status === 'running' ? 'badge-success' : srv.status === 'stopped' ? 'badge-secondary' : srv.status === 'uninstalled' ? 'badge-secondary' : 'badge-warning'}`}>
-                      <span className={`status-dot ${srv.status === 'running' ? 'active' : srv.status === 'stopped' ? 'stopped' : srv.status === 'uninstalled' ? 'stopped' : 'warning'}`}></span>
-                      {srv.status}
-                    </span>
-                  </div>
-                  <p style={{ color: 'var(--text-muted)', fontSize: '13px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '36px', marginBottom: '12px' }}>
-                    {srv.description || 'No description provided.'}
-                  </p>
-                </div>
-                
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '12px' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-                    Port: <strong style={{ color: 'var(--text-main)' }}>{srv.port || 'Auto'}</strong>
-                  </span>
-                  
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    {srv.status === 'uninstalled' ? (
-                      <span style={{ fontSize: '12px', color: 'var(--text-dark)', fontStyle: 'italic', padding: '4px 0' }}>
-                        Requires Install
+            {filteredServers.map((srv) => {
+              const themeClass = 
+                srv.status === 'running' ? 'card-theme-running' :
+                srv.status === 'stopped' ? 'card-theme-stopped' :
+                srv.status === 'uninstalled' ? 'card-theme-uninstalled' : 'card-theme-error';
+
+              return (
+                <div 
+                  key={srv.id} 
+                  onClick={() => navigate(`/servers/${srv.id}`)}
+                  className={`pretty-card animate-fade-in ${themeClass}`}
+                >
+                  <div>
+                    {/* Header */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                      <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '17px', fontWeight: '600', color: 'var(--text-main)' }}>
+                        {srv.name}
+                      </h3>
+                      <span className={`badge ${srv.status === 'running' ? 'badge-success' : srv.status === 'stopped' ? 'badge-secondary' : srv.status === 'uninstalled' ? 'badge-warning' : 'badge-error'}`}>
+                        <span className={`status-dot ${srv.status === 'running' ? 'active' : srv.status === 'stopped' ? 'stopped' : srv.status === 'uninstalled' ? 'warning' : 'stopped'}`}></span>
+                        {srv.status}
                       </span>
-                    ) : srv.status === 'stopped' ? (
-                      <button 
-                        onClick={(e) => triggerAction(e, srv.id, 'start')} 
-                        className="btn btn-accent" 
-                        style={{ padding: '4px 12px', fontSize: '12px' }}
-                      >
-                        Start
-                      </button>
-                    ) : (
-                      <>
-                        <button 
-                          onClick={(e) => triggerAction(e, srv.id, 'stop')} 
-                          className="btn btn-secondary" 
-                          style={{ padding: '4px 12px', fontSize: '12px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
-                        >
-                          Stop
-                        </button>
-                        <button 
-                          onClick={(e) => triggerAction(e, srv.id, 'restart')} 
-                          className="btn btn-secondary" 
-                          style={{ padding: '4px 12px', fontSize: '12px' }}
-                        >
-                          Restart
-                        </button>
-                      </>
+                    </div>
+
+                    {/* Server Type */}
+                    <div style={{ marginBottom: '6px' }}>
+                      <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 8px', textTransform: 'uppercase' }}>
+                        {srv.server_type || 'Survival'}
+                      </span>
+                    </div>
+
+                    {/* Port & Slug */}
+                    <div style={{ display: 'flex', gap: '12px', fontSize: '11px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginBottom: '8px' }}>
+                      <span>port: <strong style={{ color: 'var(--text-main)' }}>{srv.port || 'Auto'}</strong></span>
+                      <span>slug: <strong style={{ color: 'var(--text-main)' }}>{srv.slug}</strong></span>
+                    </div>
+
+                    {/* Description */}
+                    <p style={{ color: 'var(--text-muted)', fontSize: '13px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '36px', marginBottom: '8px' }}>
+                      {srv.description || 'No description provided.'}
+                    </p>
+                  </div>
+
+                  {/* Resource metrics and players preview */}
+                  <div>
+                    {srv.status === 'running' && srv.metrics && (
+                      <div className="metrics-bars-grid">
+                        <div className="metric-bar-group">
+                          <div className="metric-bar-label">
+                            <span>CPU</span>
+                            <span className="metric-bar-value">{srv.metrics.cpu_percentage || 0}%</span>
+                          </div>
+                          <div className="metric-bar-track">
+                            <div 
+                              className="metric-bar-fill cpu" 
+                              style={{ width: `${Math.min(100, srv.metrics.cpu_percentage || 0)}%` }}
+                            ></div>
+                          </div>
+                        </div>
+
+                        <div className="metric-bar-group">
+                          <div className="metric-bar-label">
+                            <span>RAM</span>
+                            <span className="metric-bar-value">{formatRAM(srv.metrics.ram_bytes)}</span>
+                          </div>
+                          <div className="metric-bar-track">
+                            <div 
+                              className="metric-bar-fill ram" 
+                              style={{ width: srv.metrics.ram_bytes ? '65%' : '0%' }}
+                            ></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Active Players pills row */}
+                    {srv.status === 'running' && srv.onlinePlayers && srv.onlinePlayers.length > 0 && (
+                      <div className="card-players-preview">
+                        <span style={{ fontSize: '10px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', marginRight: '4px' }}>
+                          <Users size={10} style={{ marginRight: '3px' }} />
+                        </span>
+                        {srv.onlinePlayers.map((player, idx) => (
+                          <span key={idx} className="mini-player-pill">{player}</span>
+                        ))}
+                      </div>
                     )}
                   </div>
+                  
+                  {/* Card bottom actions row */}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '12px' }}>
+                    <div className={`autostart-toggle-indicator ${srv.autostart ? 'active' : ''}`}>
+                      {srv.autostart ? <Check size={11} /> : <X size={11} />}
+                      Autostart
+                    </div>
+                    
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      {srv.status === 'uninstalled' ? (
+                        <span style={{ fontSize: '12px', color: 'var(--primary)', fontStyle: 'italic', padding: '4px 0', fontWeight: '500' }}>
+                          Requires Install
+                        </span>
+                      ) : srv.status === 'stopped' ? (
+                        <button 
+                          onClick={(e) => triggerAction(e, srv.id, 'start')} 
+                          className="btn btn-accent" 
+                          style={{ padding: '4px 10px', fontSize: '11px' }}
+                        >
+                          <Play size={10} />
+                          Start
+                        </button>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={(e) => triggerAction(e, srv.id, 'stop')} 
+                            className="btn btn-secondary" 
+                            style={{ padding: '4px 10px', fontSize: '11px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
+                          >
+                            <Square size={10} />
+                            Stop
+                          </button>
+                          <button 
+                            onClick={(e) => triggerAction(e, srv.id, 'restart')} 
+                            className="btn btn-secondary" 
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
+                          >
+                            <RotateCcw size={10} />
+                            Restart
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
+          </div>
+        ) : (
+          /* Dense List View Layout */
+          <div className="dense-list-container animate-fade-in">
+            <table className="dense-table">
+              <thead>
+                <tr>
+                  <th>Server Name</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Port</th>
+                  <th>CPU Load</th>
+                  <th>RAM Allocation</th>
+                  <th>Players</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredServers.map((srv) => (
+                  <tr key={srv.id} onClick={() => navigate(`/servers/${srv.id}`)}>
+                    <td style={{ fontWeight: '600' }}>
+                      <div>{srv.name}</div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '400', marginTop: '2px' }}>
+                        {srv.description || 'No description provided.'}
+                      </div>
+                    </td>
+                    <td>
+                      <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 8px', textTransform: 'uppercase' }}>
+                        {srv.server_type || 'Survival'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${srv.status === 'running' ? 'badge-success' : srv.status === 'stopped' ? 'badge-secondary' : srv.status === 'uninstalled' ? 'badge-warning' : 'badge-error'}`}>
+                        <span className={`status-dot ${srv.status === 'running' ? 'active' : srv.status === 'stopped' ? 'stopped' : srv.status === 'uninstalled' ? 'warning' : 'stopped'}`}></span>
+                        {srv.status}
+                      </span>
+                    </td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '12px' }}>{srv.port || '25565'}</td>
+                    <td>
+                      {srv.status === 'running' && srv.metrics ? (
+                        <div className="dense-progress-mini">
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', width: '32px' }}>{srv.metrics.cpu_percentage || 0}%</span>
+                          <div className="dense-progress-bar">
+                            <div className="dense-progress-fill" style={{ width: `${Math.min(100, srv.metrics.cpu_percentage || 0)}%`, background: 'var(--secondary)' }}></div>
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-dark)' }}>--</span>
+                      )}
+                    </td>
+                    <td>
+                      {srv.status === 'running' && srv.metrics ? (
+                        <div className="dense-progress-mini">
+                          <span style={{ fontSize: '11px', fontWeight: 'bold', width: '48px' }}>{formatRAM(srv.metrics.ram_bytes)}</span>
+                          <div className="dense-progress-bar">
+                            <div className="dense-progress-fill" style={{ width: srv.metrics.ram_bytes ? '65%' : '0%', background: '#8b5cf6' }}></div>
+                          </div>
+                        </div>
+                      ) : (
+                        <span style={{ color: 'var(--text-dark)' }}>--</span>
+                      )}
+                    </td>
+                    <td>
+                      {srv.status === 'running' ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontWeight: '600' }}>
+                          <Users size={12} />
+                          {srv.onlinePlayers?.length || 0} online
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--text-dark)' }}>Offline</span>
+                      )}
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                        {srv.status === 'uninstalled' ? (
+                          <span style={{ fontSize: '12px', color: 'var(--primary)', fontStyle: 'italic', fontWeight: '500' }}>
+                            Requires Install
+                          </span>
+                        ) : srv.status === 'stopped' ? (
+                          <button 
+                            onClick={(e) => triggerAction(e, srv.id, 'start')} 
+                            className="btn btn-accent" 
+                            style={{ padding: '4px 10px', fontSize: '11px' }}
+                          >
+                            <Play size={10} />
+                            Start
+                          </button>
+                        ) : (
+                          <>
+                            <button 
+                              onClick={(e) => triggerAction(e, srv.id, 'stop')} 
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 10px', fontSize: '11px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
+                            >
+                              <Square size={10} />
+                              Stop
+                            </button>
+                            <button 
+                              onClick={(e) => triggerAction(e, srv.id, 'restart')} 
+                              className="btn btn-secondary" 
+                              style={{ padding: '4px 10px', fontSize: '11px' }}
+                            >
+                              <RotateCcw size={10} />
+                              Restart
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </main>
@@ -298,6 +685,35 @@ export default function Dashboard() {
                   required
                   disabled={creating}
                 />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Server Type</label>
+                <select
+                  value={serverType}
+                  onChange={(e) => setServerType(e.target.value)}
+                  disabled={creating}
+                  style={{
+                    backgroundColor: 'rgba(9, 10, 15, 0.6)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    width: '100%',
+                    cursor: creating ? 'not-allowed' : 'default'
+                  }}
+                >
+                  <option value="Survival">Survival</option>
+                  <option value="Adventure/RPG">Adventure/RPG</option>
+                  <option value="Creative">Creative</option>
+                  <option value="PvP">PvP</option>
+                  <option value="Minigames">Minigames</option>
+                  <option value="Roleplay">Roleplay</option>
+                  <option value="Social">Social</option>
+                  <option value="Sandbox">Sandbox</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>

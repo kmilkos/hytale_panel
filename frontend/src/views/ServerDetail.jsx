@@ -170,6 +170,15 @@ export default function ServerDetail() {
   const [suggestions, setSuggestions] = useState([]);
   const [activeSuggestionIdx, setActiveSuggestionIdx] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [commandHistory, setCommandHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('hytale_console_history');
+      return saved ? JSON.parse(saved) : [];
+    } catch (_) {
+      return [];
+    }
+  });
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const COMMAND_SUGGESTIONS = [
     '/auth status',
@@ -199,6 +208,206 @@ export default function ServerDetail() {
     '/tp',
     '/unban'
   ];
+
+  const COMMAND_METADATA = {
+    '/auth status': {
+      description: 'Check current OAuth2 authentication status and browser verification links.',
+      usage: '/auth status',
+      options: []
+    },
+    '/auth login': {
+      description: 'Trigger the OAuth2 authentication login flow.',
+      usage: '/auth login',
+      options: []
+    },
+    '/auth select': {
+      description: 'Select an active authenticated profile for the server.',
+      usage: '/auth select <profile_name>',
+      options: [
+        { name: '<profile_name>', desc: 'The name of the authentication profile to select.' }
+      ]
+    },
+    '/auth logout': {
+      description: 'Log out from the current Hytale authentication account.',
+      usage: '/auth logout',
+      options: []
+    },
+    '/auth cancel': {
+      description: 'Cancel any ongoing OAuth2 authentication flow.',
+      usage: '/auth cancel',
+      options: []
+    },
+    '/auth persistence': {
+      description: 'Configure session persistence behavior.',
+      usage: '/auth persistence <true|false>',
+      options: [
+        { name: '<true|false>', desc: 'Set whether to persist credentials across restarts.' }
+      ]
+    },
+    '/ban': {
+      description: 'Bans a player from entering the server.',
+      usage: '/ban <username> [--duration <time>] [--reason <reason>]',
+      options: [
+        { name: '<username>', desc: 'The username of the player to ban.' },
+        { name: '--duration <time>', desc: 'Optional length of the ban (e.g., 7d, 24h).' },
+        { name: '--reason <reason>', desc: 'Optional explanation for the ban.' }
+      ]
+    },
+    '/gamemode adventure': {
+      description: 'Set target player\'s game mode to Adventure.',
+      usage: '/gamemode adventure [<player>]',
+      options: [
+        { name: '[<player>]', desc: 'Optional target player name (defaults to self).' }
+      ]
+    },
+    '/gamemode creative': {
+      description: 'Set target player\'s game mode to Creative.',
+      usage: '/gamemode creative [<player>]',
+      options: [
+        { name: '[<player>]', desc: 'Optional target player name (defaults to self).' }
+      ]
+    },
+    '/gamemode survival': {
+      description: 'Set target player\'s game mode to Survival.',
+      usage: '/gamemode survival [<player>]',
+      options: [
+        { name: '[<player>]', desc: 'Optional target player name (defaults to self).' }
+      ]
+    },
+    '/gamemode spectator': {
+      description: 'Set target player\'s game mode to Spectator.',
+      usage: '/gamemode spectator [<player>]',
+      options: [
+        { name: '[<player>]', desc: 'Optional target player name (defaults to self).' }
+      ]
+    },
+    '/heal': {
+      description: 'Refills stamina, health, and player vitals to maximum levels.',
+      usage: '/heal [<player>]',
+      options: [
+        { name: '[<player>]', desc: 'Optional target player name to heal.' }
+      ]
+    },
+    '/help': {
+      description: 'Displays list of available console commands and options.',
+      usage: '/help',
+      options: []
+    },
+    '/hide': {
+      description: 'Hides or shows players to others (vanish mode).',
+      usage: '/hide [<player>] [on|off]',
+      options: [
+        { name: '[<player>]', desc: 'Optional target player name.' },
+        { name: '[on|off]', desc: 'Turn vanish mode on or off.' }
+      ]
+    },
+    '/inventory': {
+      description: 'Manage active players item inventories (clear, view, give).',
+      usage: '/inventory <clear|view|give> <player> [<item>] [<amount>]',
+      options: [
+        { name: '<clear|view|give>', desc: 'The action to perform on the inventory.' },
+        { name: '<player>', desc: 'The target player name.' },
+        { name: '[<item>]', desc: 'The item ID to give (only for "give").' },
+        { name: '[<amount>]', desc: 'The item quantity (only for "give").' }
+      ]
+    },
+    '/kick': {
+      description: 'Disconnects an active player with a specified reason.',
+      usage: '/kick <username> [<reason>]',
+      options: [
+        { name: '<username>', desc: 'The username of the player to kick.' },
+        { name: '[<reason>]', desc: 'Optional kick explanation.' }
+      ]
+    },
+    '/kill': {
+      description: 'Kills the target player and triggers standard respawning.',
+      usage: '/kill [<player>]',
+      options: [
+        { name: '[<player>]', desc: 'Optional target player name to kill.' }
+      ]
+    },
+    '/maxplayers': {
+      description: 'Overrides maximum server slot capacities temporarily or persistently.',
+      usage: '/maxplayers <slots> [--persist]',
+      options: [
+        { name: '<slots>', desc: 'The number of player slots allowed.' },
+        { name: '--persist', desc: 'Optional flag to persist setting in server.json.' }
+      ]
+    },
+    '/op self': {
+      description: 'Grant administrator/operator permissions to yourself.',
+      usage: '/op self',
+      options: []
+    },
+    '/op add': {
+      description: 'Grant operator status and admin commands permission to a player.',
+      usage: '/op add <player>',
+      options: [
+        { name: '<player>', desc: 'The player username to grant op permissions.' }
+      ]
+    },
+    '/op remove': {
+      description: 'Revoke operator status and admin permissions from a player.',
+      usage: '/op remove <player>',
+      options: [
+        { name: '<player>', desc: 'The player username to revoke op permissions.' }
+      ]
+    },
+    '/refer': {
+      description: 'Refers/redirects players to another cluster host or port.',
+      usage: '/refer <host> <port> [--force]',
+      options: [
+        { name: '<host>', desc: 'The host name or IP address of the target server.' },
+        { name: '<port>', desc: 'The port of the target server.' },
+        { name: '--force', desc: 'Optional flag to redirect players immediately.' }
+      ]
+    },
+    '/spawning': {
+      description: 'Manage NPC spawning, global spawners, or toggle entity spawns.',
+      usage: '/spawning <enable|disable|spawn> [<entity_id>]',
+      options: [
+        { name: '<enable|disable|spawn>', desc: 'Spawner control action.' },
+        { name: '[<entity_id>]', desc: 'Optional specific Hytale entity ID.' }
+      ]
+    },
+    '/stop': {
+      description: 'Stops the active server process gracefully.',
+      usage: '/stop [--save] [--graceful <seconds>]',
+      options: [
+        { name: '--save', desc: 'Force world state save before shutting down.' },
+        { name: '--graceful <seconds>', desc: 'Countdown delay before process termination.' }
+      ]
+    },
+    '/tp': {
+      description: 'Teleports target players to absolute x, y, z coordinates.',
+      usage: '/tp <player> <x> <y> <z>',
+      options: [
+        { name: '<player>', desc: 'Target player username.' },
+        { name: '<x> <y> <z>', desc: 'Target coordinates.' }
+      ]
+    },
+    '/unban': {
+      description: 'Removes a player\'s active ban by username or IP address.',
+      usage: '/unban <username>',
+      options: [
+        { name: '<username>', desc: 'The username of the player to unban.' }
+      ]
+    }
+  };
+
+  const getActiveCommandHelp = (cmdText) => {
+    const trimmed = cmdText.trim();
+    if (!trimmed) return null;
+    
+    // Sort keys by length descending to match the most specific command first
+    const keys = Object.keys(COMMAND_METADATA).sort((a, b) => b.length - a.length);
+    for (const key of keys) {
+      if (trimmed.toLowerCase().startsWith(key.toLowerCase())) {
+        return { key, ...COMMAND_METADATA[key] };
+      }
+    }
+    return null;
+  };
 
   const [detectedIssues, setDetectedIssues] = useState([]);
   const consoleBottomRef = useRef(null);
@@ -252,6 +461,7 @@ export default function ServerDetail() {
   const [restartPolicy, setRestartPolicy] = useState('never');
   const [restartSchedule, setRestartSchedule] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [serverType, setServerType] = useState('Survival');
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState('');
 
   // 6. Players Tab State
@@ -615,7 +825,7 @@ export default function ServerDetail() {
     }
 
     const filtered = COMMAND_SUGGESTIONS.filter(cmd => 
-      cmd.toLowerCase().startsWith(val.toLowerCase()) && cmd.toLowerCase() !== val.toLowerCase()
+      cmd.toLowerCase().startsWith(val.toLowerCase())
     );
     setSuggestions(filtered);
     setActiveSuggestionIdx(0);
@@ -648,6 +858,33 @@ export default function ServerDetail() {
           e.preventDefault();
           setCommand(match);
         }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (commandHistory.length > 0) {
+          let nextIdx = historyIndex;
+          if (nextIdx === -1) {
+            nextIdx = commandHistory.length - 1;
+          } else if (nextIdx > 0) {
+            nextIdx = nextIdx - 1;
+          }
+          setHistoryIndex(nextIdx);
+          setCommand(commandHistory[nextIdx]);
+        }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (commandHistory.length > 0) {
+          let nextIdx = historyIndex;
+          if (nextIdx !== -1) {
+            if (nextIdx < commandHistory.length - 1) {
+              nextIdx = nextIdx + 1;
+              setHistoryIndex(nextIdx);
+              setCommand(commandHistory[nextIdx]);
+            } else {
+              setHistoryIndex(-1);
+              setCommand('');
+            }
+          }
+        }
       }
     }
   };
@@ -659,13 +896,14 @@ export default function ServerDetail() {
       const data = await apiRequest(`/servers/${id}`);
       setServer(data);
       setPort(data.port);
-      setAutostart(data.autostart === 1);
+      setAutostart(!!data.autostart);
       
       const configData = data.config_json ? JSON.parse(data.config_json) : {};
       setJvmArgs(configData.jvmArgs || '');
       setRestartPolicy(data.restart_policy || 'never');
       setRestartSchedule(data.restart_schedule || '');
       setWebhookUrl(data.webhook_url || '');
+      setServerType(data.server_type || 'Survival');
 
       // Load whitelist/bans configs
       const wl = configData.whitelist || '';
@@ -717,6 +955,19 @@ export default function ServerDetail() {
   const handleSendCommand = (e) => {
     e.preventDefault();
     if (!command.trim()) return;
+
+    // Save to command history
+    setCommandHistory(prev => {
+      if (prev.length > 0 && prev[prev.length - 1] === command.trim()) {
+        return prev;
+      }
+      const updated = [...prev, command.trim()].slice(-50);
+      try {
+        localStorage.setItem('hytale_console_history', JSON.stringify(updated));
+      } catch (_) {}
+      return updated;
+    });
+    setHistoryIndex(-1);
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
@@ -1599,7 +1850,8 @@ export default function ServerDetail() {
         method: 'PATCH',
         body: {
           port: parseInt(port, 10),
-          autostart: autostart ? 1 : 0,
+          autostart: !!autostart,
+          server_type: serverType,
           restart_policy: restartPolicy,
           restart_schedule: restartSchedule,
           webhook_url: webhookUrl,
@@ -1695,25 +1947,33 @@ export default function ServerDetail() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-dark)' }}>
       {/* Header controls */}
-      <header style={{
-        backgroundColor: 'var(--bg-panel)',
-        borderBottom: '1px solid var(--border)',
-        padding: '20px 32px'
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '4px' }}>
-              <Link to="/" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '13px' }}>&larr; Dashboard</Link>
-              <Link to="/metrics" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '13px' }}>System Metrics</Link>
-              <span style={{ color: 'var(--text-dark)', fontSize: '11px' }}>|</span>
-              <span className={`badge ${server.status === 'running' ? 'badge-success' : server.status === 'stopped' ? 'badge-secondary' : server.status === 'uninstalled' ? 'badge-secondary' : 'badge-warning'}`}>
-                <span className={`status-dot ${server.status === 'running' ? 'active' : server.status === 'stopped' ? 'stopped' : 'warning'}`}></span>
-                {server.status}
-              </span>
-            </div>
-            <h2 style={{ fontFamily: 'var(--font-heading)', fontSize: '26px', fontWeight: 'bold' }}>{server.name}</h2>
-          </div>
+      <header className="fancy-header" style={{ borderBottom: 'none' }}>
+        <div className="fancy-nav-container">
+          <nav className="fancy-nav">
+            <Link to="/" className="fancy-nav-item">
+              <span>&larr;</span> Back
+            </Link>
+            <Link to="/" className="fancy-nav-item">Dashboard</Link>
+            <Link to="/metrics" className="fancy-nav-item">System Metrics</Link>
+          </nav>
+        </div>
 
+        <div className="fancy-title-container">
+          <h1 className="fancy-title">
+            <span className="fancy-title-brackets">[</span>
+            {server.name}
+            <span className="fancy-title-brackets">]</span>
+          </h1>
+          <span className="badge badge-warning" style={{ textTransform: 'uppercase', marginRight: '8px' }}>
+            {server.server_type || 'Survival'}
+          </span>
+          <span className={`badge ${server.status === 'running' ? 'badge-success' : server.status === 'stopped' ? 'badge-secondary' : server.status === 'uninstalled' ? 'badge-secondary' : 'badge-warning'}`}>
+            <span className={`status-dot ${server.status === 'running' ? 'active' : server.status === 'stopped' ? 'stopped' : 'warning'}`}></span>
+            {server.status}
+          </span>
+        </div>
+
+        <div className="fancy-right-container">
           <div style={{ display: 'flex', gap: '12px' }}>
             {server.status === 'uninstalled' ? (
               <button 
@@ -1727,18 +1987,24 @@ export default function ServerDetail() {
                 {installingFiles ? 'Deploying Core Files...' : 'Install Hytale Server'}
               </button>
             ) : server.status === 'stopped' ? (
-              <button onClick={() => handleServerAction('start')} className="btn btn-primary">Start Server</button>
+              <button onClick={() => handleServerAction('start')} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>Start Server</button>
             ) : (
               <>
-                <button onClick={() => handleServerAction('stop')} className="btn btn-danger">Stop</button>
-                <button onClick={() => handleServerAction('restart')} className="btn btn-secondary">Restart</button>
+                <button onClick={() => handleServerAction('stop')} className="btn btn-danger" style={{ padding: '8px 16px', fontSize: '13px' }}>Stop</button>
+                <button onClick={() => handleServerAction('restart')} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>Restart</button>
               </>
             )}
           </div>
         </div>
+      </header>
 
-        {/* Tab Selection */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '24px', borderTop: '1px solid var(--border)', paddingTop: '16px', flexWrap: 'wrap' }}>
+      {/* Tab Selection */}
+      <div style={{
+        backgroundColor: 'var(--bg-panel)',
+        borderBottom: '1px solid var(--border)',
+        padding: '0 32px 16px 32px'
+      }}>
+        <div style={{ display: 'flex', gap: '8px', borderTop: '1px solid var(--border)', paddingTop: '16px', flexWrap: 'wrap' }}>
           {['console', 'files', 'mods', 'backups', 'schedules', 'players', 'config', 'logger'].map((tab) => (
             <button
               key={tab}
@@ -1757,7 +2023,7 @@ export default function ServerDetail() {
             </button>
           ))}
         </div>
-      </header>
+      </div>
 
       {/* Tab Panels */}
       <main style={{ flex: 1, padding: '32px', width: '100%' }}>
@@ -1854,50 +2120,216 @@ export default function ServerDetail() {
                     disabled={server.status !== 'running' || isViewer}
                   />
                   
-                  {showSuggestions && suggestions.length > 0 && (
-                    <div style={{
-                      position: 'absolute',
-                      bottom: 'calc(100% + 8px)',
-                      left: 0,
-                      width: '100%',
-                      backgroundColor: '#0b0c10',
-                      border: '1px solid var(--border)',
-                      borderRadius: '8px',
-                      boxShadow: 'var(--shadow-glow)',
-                      zIndex: 100,
-                      maxHeight: '200px',
-                      overflowY: 'auto',
-                      padding: '4px'
-                    }}>
-                      {suggestions.map((sug, idx) => (
-                        <div
-                          key={sug}
-                          onClick={() => {
-                            setCommand(sug);
-                            setSuggestions([]);
-                            setShowSuggestions(false);
-                          }}
-                          style={{
-                            padding: '8px 12px',
-                            fontSize: '12px',
-                            fontFamily: 'var(--font-mono)',
-                            borderRadius: '6px',
-                            backgroundColor: activeSuggestionIdx === idx ? 'var(--primary-glow)' : 'transparent',
-                            color: activeSuggestionIdx === idx ? 'var(--primary)' : 'var(--text-main)',
-                            cursor: 'pointer',
+                  {(() => {
+                    const activeHelp = (showSuggestions && suggestions.length > 0 && activeSuggestionIdx < suggestions.length)
+                      ? { key: suggestions[activeSuggestionIdx], ...COMMAND_METADATA[suggestions[activeSuggestionIdx]] }
+                      : getActiveCommandHelp(command);
+
+                    // Case A: Suggestions are open
+                    if (showSuggestions && suggestions.length > 0) {
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 'calc(100% + 8px)',
+                          left: 0,
+                          width: '100%',
+                          minWidth: '550px',
+                          backgroundColor: 'rgba(11, 12, 16, 0.95)',
+                          backdropFilter: 'blur(12px)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '12px',
+                          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5), var(--shadow-glow)',
+                          zIndex: 100,
+                          maxHeight: '280px',
+                          display: 'flex',
+                          overflow: 'hidden',
+                          animation: 'fadeIn 0.2s ease-out'
+                        }}>
+                          {/* Left Column: Command Suggestions */}
+                          <div style={{
+                            width: '40%',
+                            borderRight: '1px solid var(--border)',
+                            overflowY: 'auto',
+                            padding: '6px',
                             display: 'flex',
-                            justifyContent: 'space-between',
-                            transition: 'all 0.15s ease'
-                          }}
-                        >
-                          <span>{sug}</span>
-                          <span style={{ fontSize: '10px', color: 'var(--text-dark)' }}>
-                            {activeSuggestionIdx === idx ? 'Press Tab' : ''}
-                          </span>
+                            flexDirection: 'column',
+                            gap: '4px'
+                          }}>
+                            {suggestions.map((sug, idx) => (
+                              <div
+                                key={sug}
+                                onClick={() => {
+                                  setCommand(sug);
+                                  setSuggestions([]);
+                                  setShowSuggestions(false);
+                                }}
+                                style={{
+                                  padding: '8px 12px',
+                                  fontSize: '12px',
+                                  fontFamily: 'var(--font-mono)',
+                                  borderRadius: '6px',
+                                  backgroundColor: activeSuggestionIdx === idx ? 'var(--primary-glow)' : 'transparent',
+                                  color: activeSuggestionIdx === idx ? 'var(--primary)' : 'var(--text-main)',
+                                  cursor: 'pointer',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  transition: 'all 0.15s ease'
+                                }}
+                              >
+                                <span>{sug}</span>
+                                <span style={{ fontSize: '9px', opacity: activeSuggestionIdx === idx ? 0.8 : 0, color: 'var(--primary)' }}>
+                                  [Tab]
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Right Column: Live Command Metadata */}
+                          <div style={{
+                            width: '60%',
+                            padding: '16px',
+                            overflowY: 'auto',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '10px',
+                            backgroundColor: 'rgba(15, 17, 23, 0.4)'
+                          }}>
+                            {activeHelp ? (
+                              <>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                  <span style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '14px',
+                                    fontWeight: '600',
+                                    color: 'var(--primary)'
+                                  }}>
+                                    {activeHelp.key}
+                                  </span>
+                                </div>
+                                <div style={{ fontSize: '12px', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                                  {activeHelp.description}
+                                </div>
+                                <div style={{ marginTop: '4px' }}>
+                                  <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dark)', fontWeight: '600', letterSpacing: '0.05em' }}>
+                                    Usage
+                                  </span>
+                                  <div style={{
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '11px',
+                                    padding: '6px 10px',
+                                    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                                    borderRadius: '6px',
+                                    border: '1px solid rgba(255,255,255,0.05)',
+                                    marginTop: '4px',
+                                    color: 'var(--text-main)'
+                                  }}>
+                                    {activeHelp.usage}
+                                  </div>
+                                </div>
+                                {activeHelp.options && activeHelp.options.length > 0 && (
+                                  <div style={{ marginTop: '4px' }}>
+                                    <span style={{ fontSize: '10px', textTransform: 'uppercase', color: 'var(--text-dark)', fontWeight: '600', letterSpacing: '0.05em' }}>
+                                      Arguments
+                                    </span>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                                      {activeHelp.options.map(opt => (
+                                        <div key={opt.name} style={{ display: 'flex', flexDirection: 'column', fontSize: '11px' }}>
+                                          <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--secondary)', fontWeight: '500' }}>
+                                            {opt.name}
+                                          </span>
+                                          <span style={{ color: 'var(--text-muted)', paddingLeft: '4px', borderLeft: '2px solid var(--border)' }}>
+                                            {opt.desc}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div style={{ fontSize: '12px', color: 'var(--text-dark)', display: 'flex', alignItems: 'center', height: '100%', justifyContent: 'center' }}>
+                                Select a command to see details.
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      );
+                    }
+
+                    // Case B: Suggestions closed, but active typed command matches help (persistent argument reference)
+                    if (activeHelp) {
+                      return (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: 'calc(100% + 8px)',
+                          left: 0,
+                          width: '100%',
+                          minWidth: '550px',
+                          backgroundColor: 'rgba(11, 12, 16, 0.95)',
+                          backdropFilter: 'blur(12px)',
+                          border: '1px solid var(--border)',
+                          borderRadius: '12px',
+                          boxShadow: '0 8px 32px 0 rgba(0, 0, 0, 0.5), var(--shadow-glow)',
+                          zIndex: 100,
+                          padding: '14px 16px',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '6px',
+                          animation: 'fadeIn 0.2s ease-out'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{
+                              fontFamily: 'var(--font-mono)',
+                              fontSize: '13px',
+                              fontWeight: '600',
+                              color: 'var(--primary)'
+                            }}>
+                              {activeHelp.key}
+                            </span>
+                            <span style={{ fontSize: '10px', color: 'var(--text-dark)' }}>
+                              Live Syntax Guide
+                            </span>
+                          </div>
+                          
+                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                            {activeHelp.description}
+                          </div>
+
+                          <div style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '11px',
+                            padding: '6px 10px',
+                            backgroundColor: 'rgba(0, 0, 0, 0.3)',
+                            borderRadius: '6px',
+                            border: '1px solid rgba(255,255,255,0.05)',
+                            color: 'var(--text-main)'
+                          }}>
+                            {activeHelp.usage}
+                          </div>
+
+                          {activeHelp.options && activeHelp.options.length > 0 && (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '2px' }}>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 16px' }}>
+                                {activeHelp.options.map(opt => (
+                                  <div key={opt.name} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10px' }}>
+                                    <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--secondary)', fontWeight: '600' }}>
+                                      {opt.name}
+                                    </span>
+                                    <span style={{ color: 'var(--text-dark)' }}>
+                                      — {opt.desc}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    return null;
+                  })()}
                 </div>
                 <button type="submit" className="btn btn-primary" disabled={server.status !== 'running' || isViewer}>
                   Send
@@ -3896,16 +4328,16 @@ export default function ServerDetail() {
                 </div>
 
                 <div className="form-group">
-                  <label className="form-label">Scheduled Restart (Cron Format)</label>
+                  <label className="form-label">Scheduled Daily Restart (24h Format)</label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="e.g. 0 4 * * * (daily 4 AM restart)"
+                    placeholder="e.g. 04:00"
                     value={restartSchedule}
                     onChange={(e) => setRestartSchedule(e.target.value)}
                     disabled={isViewer}
                   />
-                  <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Enter standard 5-field cron statement or leave empty.</span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Enter a daily restart time in 24-hour HH:mm format, or leave empty to disable.</span>
                 </div>
 
                 <div className="form-group">
@@ -3919,6 +4351,35 @@ export default function ServerDetail() {
                     disabled={isViewer}
                   />
                   <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Posts server offline, crash alerts and startups to external discord logs.</span>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Server Type</label>
+                  <select
+                    value={serverType}
+                    onChange={(e) => setServerType(e.target.value)}
+                    disabled={isViewer}
+                    style={{
+                      backgroundColor: 'var(--bg-dark)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      width: '100%',
+                      cursor: isViewer ? 'not-allowed' : 'default'
+                    }}
+                  >
+                    <option value="Survival">Survival</option>
+                    <option value="Adventure/RPG">Adventure/RPG</option>
+                    <option value="Creative">Creative</option>
+                    <option value="PvP">PvP</option>
+                    <option value="Minigames">Minigames</option>
+                    <option value="Roleplay">Roleplay</option>
+                    <option value="Social">Social</option>
+                    <option value="Sandbox">Sandbox</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>

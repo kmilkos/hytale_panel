@@ -206,29 +206,30 @@ export default function SystemMetrics() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-dark)' }}>
       {/* Header */}
-      <header style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '16px 32px',
-        backgroundColor: 'var(--bg-panel)',
-        borderBottom: '1px solid var(--border)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
-          <h1 className="text-glow-primary" style={{ fontFamily: 'var(--font-heading)', fontSize: '22px', fontWeight: 'bold', margin: 0 }}>
-            Hytale Clusters
-          </h1>
-          <nav style={{ display: 'flex', gap: '16px' }}>
-            <Link to="/" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Dashboard</Link>
-            <Link to="/metrics" style={{ color: 'var(--primary)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>System Metrics</Link>
-            <Link to="/settings" style={{ color: 'var(--text-muted)', textDecoration: 'none', fontSize: '14px', fontWeight: '500' }}>Settings</Link>
+      <header className="fancy-header">
+        <div className="fancy-nav-container">
+          <nav className="fancy-nav">
+            <Link to="/" className="fancy-nav-item">Dashboard</Link>
+            <Link to="/metrics" className="fancy-nav-item active">System Metrics</Link>
+            <Link to="/settings" className="fancy-nav-item">Settings</Link>
           </nav>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-          <span style={{ fontSize: '14px', color: 'var(--text-muted)' }}>
-            Logged in as <strong style={{ color: 'var(--text-main)' }}>{user?.username}</strong> ({user?.role})
-          </span>
-          <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '12px' }}>
+
+        <div className="fancy-title-container">
+          <h1 className="fancy-title">
+            <span className="fancy-title-brackets">[</span>
+            Hytale Clusters
+            <span className="fancy-title-brackets">]</span>
+          </h1>
+        </div>
+
+        <div className="fancy-right-container">
+          <div className="fancy-user-badge">
+            <span style={{ color: 'var(--text-muted)' }}>Logged in as</span>
+            <strong style={{ color: 'var(--text-main)' }}>{user?.username}</strong>
+            <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 6px' }}>{user?.role}</span>
+          </div>
+          <button onClick={handleLogout} className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
             Sign Out
           </button>
         </div>
