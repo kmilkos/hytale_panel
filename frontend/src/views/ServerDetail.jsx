@@ -239,6 +239,7 @@ export default function ServerDetail() {
   const [loadingInstalledModDetails, setLoadingInstalledModDetails] = useState(false);
   const [modsSortBy, setModsSortBy] = useState('featured');
   const [remoteSearchError, setRemoteSearchError] = useState(null);
+  const [modsSubTab, setModsSubTab] = useState('installed'); // 'installed' | 'marketplace'
 
   // 4. Backups Tab State
   const [backups, setBackups] = useState([]);
@@ -1399,10 +1400,10 @@ export default function ServerDetail() {
   };
 
   useEffect(() => {
-    if (activeTab === 'mods') {
+    if (activeTab === 'mods' && modsSubTab === 'marketplace') {
       handleSearchMods();
     }
-  }, [modsSortBy, modsSource, activeTab]);
+  }, [modsSortBy, modsSource, activeTab, modsSubTab]);
 
   const handleViewModDetails = async (mod) => {
     setSelectedMod(mod);
@@ -2198,10 +2199,56 @@ export default function ServerDetail() {
 
         {/* 3. MODS TAB */}
         {activeTab === 'mods' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            {/* Installed Server Mods */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            {/* Sub-Tab Navigation Header */}
+            <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '8px' }}>
+              <button
+                onClick={() => setModsSubTab('installed')}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: modsSubTab === 'installed' ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                  color: modsSubTab === 'installed' ? 'var(--primary)' : 'var(--text-muted)',
+                  borderBottom: modsSubTab === 'installed' ? '2px solid var(--primary)' : '2px solid transparent',
+                  transition: 'all 0.15s ease',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                📂 Installed Mods
+                <span style={{ fontSize: '11px', backgroundColor: 'rgba(255,255,255,0.05)', padding: '1px 7px', borderRadius: '10px', color: 'var(--text-main)', border: '1px solid var(--border)', fontWeight: '600' }}>
+                  {installedMods.length}
+                </span>
+              </button>
+
+              <button
+                onClick={() => setModsSubTab('marketplace')}
+                style={{
+                  padding: '10px 20px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  borderRadius: '8px',
+                  border: 'none',
+                  cursor: 'pointer',
+                  backgroundColor: modsSubTab === 'marketplace' ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
+                  color: modsSubTab === 'marketplace' ? 'var(--primary)' : 'var(--text-muted)',
+                  borderBottom: modsSubTab === 'marketplace' ? '2px solid var(--primary)' : '2px solid transparent',
+                  transition: 'all 0.15s ease'
+                }}
+              >
+                🌐 Mod Marketplace
+              </button>
+            </div>
+
             {/* Installed Server Mods Grid Container */}
-            <div style={{ display: 'grid', gridTemplateColumns: selectedInstalledMod ? '1.2fr 1fr' : '1fr', gap: '24px', transition: 'all 0.3s ease' }}>
+            {modsSubTab === 'installed' && (
+              <div style={{ display: 'grid', gridTemplateColumns: selectedInstalledMod ? '1.2fr 1fr' : '1fr', gap: '24px', transition: 'all 0.3s ease' }}>
               
               {/* Left Side: Installed List */}
               <div className="glass-panel animate-fade-in" style={{ height: 'fit-content' }}>
@@ -2709,8 +2756,10 @@ export default function ServerDetail() {
               )}
 
             </div>
+          )}
 
-            {/* Install New Mods Browser */}
+          {/* Install New Mods Browser */}
+          {modsSubTab === 'marketplace' && (
             <div className="glass-panel animate-fade-in">
               <div style={{ borderBottom: '1px solid var(--border)', paddingBottom: '16px', marginBottom: '20px' }}>
                 <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', marginBottom: '12px' }}>Mod Marketplace Discovery</h3>
@@ -2886,6 +2935,7 @@ export default function ServerDetail() {
                 </div>
               </div>
             </div>
+          )}
           </div>
         )}
 
