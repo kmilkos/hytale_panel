@@ -3,7 +3,7 @@ const host = window.location.host || '127.0.0.1:5600';
 const cleanHostname = hostname === 'localhost' ? '127.0.0.1' : hostname;
 const cleanHost = host.startsWith('localhost') ? host.replace('localhost', '127.0.0.1') : host;
 
-export const API_BASE_URL = window.location.port === '5173'
+import { showError } from './errorModal';
   ? `http://${cleanHostname}:5600/api`
   : '/api';
 
@@ -63,7 +63,8 @@ export async function apiRequest(endpoint, options = {}) {
   try {
     res = await fetch(url, { ...options, headers, body });
   } catch (networkErr) {
-    // Network-level failure: server down, CORS block, no internet, etc.
+    // Show network error modal with details
+    showError('Cannot connect to the server. Please ensure the backend is running.', { details: networkErr.message });
     throw new Error(`Cannot connect to the server. Make sure the backend is running on port 5600. (${networkErr.message})`);
   }
 
@@ -76,9 +77,11 @@ export async function apiRequest(endpoint, options = {}) {
   }
 
   if (!res.ok) {
-    // Backend returns { error: { status, message, details } }
     const errData = await res.json().catch(() => ({}));
     const message = errData?.error?.message || errData?.message || `Server error ${res.status}: ${res.statusText}`;
+    // Show server error modal with details if available
+    const details = errData?.error?.details || JSON.stringify(errData);
+    showError(message, { details });
     throw new Error(message);
   }
 
