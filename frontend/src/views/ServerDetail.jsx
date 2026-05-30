@@ -1986,7 +1986,7 @@ export default function ServerDetail() {
             {server.server_type || 'Survival'}
           </span>
           <span className="badge badge-accent" style={{ textTransform: 'none', marginRight: '8px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
-            v{server.server_version || 'latest'}
+            v{server.server_version === 'Use Global Default' ? `${server.resolved_version || 'latest'} (Default)` : server.server_version || 'latest'}
           </span>
           <span className={`badge ${server.status === 'running' ? 'badge-success' : server.status === 'stopped' ? 'badge-secondary' : server.status === 'uninstalled' ? 'badge-secondary' : 'badge-warning'}`}>
             <span className={`status-dot ${server.status === 'running' ? 'active' : server.status === 'stopped' ? 'stopped' : 'warning'}`}></span>
@@ -2064,6 +2064,23 @@ export default function ServerDetail() {
             <p style={{ color: 'var(--text-muted)', marginBottom: '24px', fontSize: '14px', lineHeight: '1.6' }}>
               This server is currently registered but has no game core files. Click the <strong>Install Hytale Server</strong> button in the top header to copy the server core files from the central cache.
             </p>
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '12px',
+              backgroundColor: 'rgba(255, 255, 255, 0.03)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+              padding: '8px 16px',
+              borderRadius: '24px',
+              marginBottom: '24px'
+            }}>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Target Hytale Version:</span>
+              <span className="badge badge-accent" style={{ textTransform: 'none', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                {server.server_version === 'Use Global Default' ? `Use Global Default (v${server.resolved_version || 'latest'})` : `v${server.server_version || 'latest'}`}
+              </span>
+            </div>
+            <br />
             <button 
               onClick={handleInstallServerFiles} 
               className="btn btn-success" 

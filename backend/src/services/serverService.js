@@ -210,10 +210,14 @@ function getServer(db, id) {
   if (!server) {
     throw new HttpError(404, 'Server not found.');
   }
-  return rowToServer(server);
+  return rowToServer(server, db);
 }
 
-function rowToServer(row) {
+function rowToServer(row, db) {
+  let resolved_version = row.server_version || 'Use Global Default';
+  if (db) {
+    resolved_version = resolveServerVersion(db, row);
+  }
   return {
     ...row,
     autostart: row.autostart === 1,
@@ -221,6 +225,7 @@ function rowToServer(row) {
     onlinePlayers: getOnlinePlayers(row.id),
     server_type: row.server_type || 'Survival',
     server_version: row.server_version || 'Use Global Default',
+    resolved_version: resolved_version,
   };
 }
 

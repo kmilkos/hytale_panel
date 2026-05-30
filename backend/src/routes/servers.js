@@ -67,7 +67,7 @@ module.exports = function(db) {
           ORDER BY s.name ASC
         `).all(req.user.sub);
       }
-      const servers = rows.map(rowToServer).map(srv => {
+      const servers = rows.map(row => rowToServer(row, db)).map(srv => {
         let latestMetrics = null;
         if (srv.isRunning) {
           try {

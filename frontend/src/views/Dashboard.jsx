@@ -397,10 +397,13 @@ export default function Dashboard() {
                       </span>
                     </div>
 
-                    {/* Server Type */}
-                    <div style={{ marginBottom: '6px' }}>
+                    {/* Server Type & Version */}
+                    <div style={{ marginBottom: '6px', display: 'flex', gap: '6px' }}>
                       <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 8px', textTransform: 'uppercase' }}>
                         {srv.server_type || 'Survival'}
+                      </span>
+                      <span className="badge badge-accent" style={{ fontSize: '9px', padding: '2px 8px', textTransform: 'none', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                        v{srv.resolved_version || 'latest'}
                       </span>
                     </div>
 
@@ -534,9 +537,14 @@ export default function Dashboard() {
                       </div>
                     </td>
                     <td>
-                      <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 8px', textTransform: 'uppercase' }}>
-                        {srv.server_type || 'Survival'}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                        <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 8px', textTransform: 'uppercase' }}>
+                          {srv.server_type || 'Survival'}
+                        </span>
+                        <span className="badge badge-accent" style={{ fontSize: '9px', padding: '2px 8px', textTransform: 'none', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                          v{srv.resolved_version || 'latest'}
+                        </span>
+                      </div>
                     </td>
                     <td>
                       <span className={`badge ${srv.status === 'running' ? 'badge-success' : srv.status === 'stopped' ? 'badge-secondary' : srv.status === 'uninstalled' ? 'badge-warning' : 'badge-error'}`}>
