@@ -463,6 +463,7 @@ export default function ServerDetail() {
   const [restartSchedule, setRestartSchedule] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [serverType, setServerType] = useState('Survival');
+  const [serverVersion, setServerVersion] = useState('Use Global Default');
   const [saveSettingsSuccess, setSaveSettingsSuccess] = useState('');
 
   // 6. Players Tab State
@@ -905,6 +906,7 @@ export default function ServerDetail() {
       setRestartSchedule(data.restart_schedule || '');
       setWebhookUrl(data.webhook_url || '');
       setServerType(data.server_type || 'Survival');
+      setServerVersion(data.server_version || 'Use Global Default');
 
       // Load whitelist/bans configs
       const wl = configData.whitelist || '';
@@ -1867,6 +1869,7 @@ export default function ServerDetail() {
           port: parseInt(port, 10),
           autostart: !!autostart,
           server_type: serverType,
+          server_version: serverVersion,
           restart_policy: restartPolicy,
           restart_schedule: restartSchedule,
           webhook_url: webhookUrl,
@@ -1981,6 +1984,9 @@ export default function ServerDetail() {
           </h1>
           <span className="badge badge-warning" style={{ textTransform: 'uppercase', marginRight: '8px' }}>
             {server.server_type || 'Survival'}
+          </span>
+          <span className="badge badge-accent" style={{ textTransform: 'none', marginRight: '8px', backgroundColor: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+            v{server.server_version || 'latest'}
           </span>
           <span className={`badge ${server.status === 'running' ? 'badge-success' : server.status === 'stopped' ? 'badge-secondary' : server.status === 'uninstalled' ? 'badge-secondary' : 'badge-warning'}`}>
             <span className={`status-dot ${server.status === 'running' ? 'active' : server.status === 'stopped' ? 'stopped' : 'warning'}`}></span>
@@ -4402,6 +4408,31 @@ export default function ServerDetail() {
                     <option value="Sandbox">Sandbox</option>
                     <option value="Other">Other</option>
                   </select>
+                </div>
+
+                <div className="form-group">
+                  <label className="form-label">Server Version</label>
+                  <select
+                    value={serverVersion}
+                    onChange={(e) => setServerVersion(e.target.value)}
+                    disabled={isViewer}
+                    style={{
+                      backgroundColor: 'var(--bg-dark)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border)',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      fontSize: '13px',
+                      width: '100%',
+                      cursor: isViewer ? 'not-allowed' : 'default'
+                    }}
+                  >
+                    <option value="Use Global Default">Use Global Default</option>
+                    <option value="latest">latest</option>
+                    <option value="0.2.0">0.2.0</option>
+                    <option value="0.1.0">0.1.0</option>
+                  </select>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Change the specific Hytale core version or choose to inherit the global default.</span>
                 </div>
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>

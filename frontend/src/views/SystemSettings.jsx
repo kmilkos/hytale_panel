@@ -10,6 +10,7 @@ export default function SystemSettings() {
   // Settings Form State
   const [cfKey, setCfKey] = useState('');
   const [nxKey, setNxKey] = useState('');
+  const [defaultVersion, setDefaultVersion] = useState('latest');
   const [saveSuccess, setSaveSuccess] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -87,6 +88,7 @@ export default function SystemSettings() {
       const settings = await apiRequest('/system/settings');
       setCfKey(settings.curseforge_api_key || '');
       setNxKey(settings.nexus_api_key || '');
+      setDefaultVersion(settings.default_server_version || 'latest');
     } catch (err) {
       console.error('Failed to fetch system settings', err);
     }
@@ -233,7 +235,8 @@ export default function SystemSettings() {
         method: 'PUT',
         body: {
           curseforge_api_key: cfKey,
-          nexus_api_key: nxKey
+          nexus_api_key: nxKey,
+          default_server_version: defaultVersion
         }
       });
       setSaveSuccess('API keys and system settings saved successfully.');
@@ -456,6 +459,30 @@ export default function SystemSettings() {
                   disabled={saving}
                 />
                 <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Used for querying remote listings discovery (manual install only).</span>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Default Hytale Server Version</label>
+                <select
+                  value={defaultVersion}
+                  onChange={(e) => setDefaultVersion(e.target.value)}
+                  disabled={saving}
+                  style={{
+                    backgroundColor: 'rgba(9, 10, 15, 0.6)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    width: '100%',
+                    cursor: saving ? 'not-allowed' : 'default'
+                  }}
+                >
+                  <option value="latest">latest</option>
+                  <option value="0.2.0">0.2.0</option>
+                  <option value="0.1.0">0.1.0</option>
+                </select>
+                <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Determines which Hytale version to download and deploy for new servers when no specific version is selected.</span>
               </div>
 
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '12px' }} disabled={saving}>

@@ -210,6 +210,16 @@ const migrations = [
         logger.warn('Failed to add server_type column, it might already exist:', err.message);
       }
     }
+  },
+  {
+    name: '005_add_server_version',
+    up: (db) => {
+      try {
+        db.exec("ALTER TABLE servers ADD COLUMN server_version TEXT DEFAULT 'Use Global Default'");
+      } catch (err) {
+        logger.warn('Failed to add server_version column, it might already exist:', err.message);
+      }
+    }
   }
 ];
 

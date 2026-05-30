@@ -220,6 +220,7 @@ function rowToServer(row) {
     isRunning: activeProcesses.has(row.id),
     onlinePlayers: getOnlinePlayers(row.id),
     server_type: row.server_type || 'Survival',
+    server_version: row.server_version || 'Use Global Default',
   };
 }
 
@@ -1132,6 +1133,15 @@ async function cacheInstaller(db, downloadUrl) {
   return { message: 'Installer download started in background.' };
 }
 
+function resolveServerVersion(db, server) {
+  let version = server.server_version || 'Use Global Default';
+  if (version === 'Use Global Default') {
+    const row = db.prepare("SELECT value FROM settings WHERE key = 'default_server_version'").get();
+    version = row ? row.value : 'latest';
+  }
+  return version;
+}
+
 async function installServerFiles(db, serverId) {
   const server = getServer(db, serverId);
   if (server.status !== 'uninstalled') {
@@ -1142,7 +1152,8 @@ async function installServerFiles(db, serverId) {
     throw new HttpError(400, 'Central Hytale installer cache is missing or corrupt. Go to Settings to download it first.');
   }
 
-  logger.info(`Deploying Hytale server files to server ID ${serverId} from central shared/ cache...`);
+  const version = resolveServerVersion(db, server);
+  logger.info(`Deploying Hytale server files (version: ${version}) to server ID ${serverId}...`);
 
   const sharedDir = path.join(__dirname, '..', '..', '..', 'shared');
   const targetDir = path.resolve(server.install_path);
@@ -1151,8 +1162,22 @@ async function installServerFiles(db, serverId) {
     fs.mkdirSync(targetDir, { recursive: true });
   }
 
+  // If version is not 'latest', look in shared/versions/<version>/
+  let versionedSrcDir = sharedDir;
+  if (version !== 'latest') {
+    const customPath = path.join(sharedDir, 'versions', version);
+    if (fs.existsSync(customPath)) {
+      versionedSrcDir = customPath;
+    } else {
+      logger.warn(`Version folder for "${version}" not found at ${customPath}. Falling back to default shared cache directory.`);
+    }
+  }
+
   // Deploy Assets.zip (Use native symbolic link with fallback to copy)
-  const srcAssets = path.join(sharedDir, 'Assets.zip');
+  let srcAssets = path.join(versionedSrcDir, 'Assets.zip');
+  if (!fs.existsSync(srcAssets)) {
+    srcAssets = path.join(sharedDir, 'Assets.zip');
+  }
   const destAssets = path.join(targetDir, 'Assets.zip');
   try {
     if (fs.existsSync(destAssets)) {
@@ -1166,7 +1191,10 @@ async function installServerFiles(db, serverId) {
   }
 
   // Deploy Server/ folder (Physically isolate directory, symlink massive HytaleServer.jar, copy secondary files)
-  const srcServer = path.join(sharedDir, 'Server');
+  let srcServer = path.join(versionedSrcDir, 'Server');
+  if (!fs.existsSync(srcServer)) {
+    srcServer = path.join(sharedDir, 'Server');
+  }
   const destServer = path.join(targetDir, 'Server');
   try {
     if (fs.existsSync(destServer)) {

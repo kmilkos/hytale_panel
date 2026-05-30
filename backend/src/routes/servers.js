@@ -29,6 +29,7 @@ const createServerSchema = z.object({
   port: z.number().int().min(1024).max(65535).optional(),
   autostart: z.union([z.boolean(), z.number().int().min(0).max(1)]).optional(),
   server_type: z.enum(['Survival', 'Adventure/RPG', 'Creative', 'PvP', 'Minigames', 'Roleplay', 'Social', 'Sandbox', 'Other']).optional(),
+  server_version: z.string().optional(),
 });
 
 const updateServerSchema = z.object({
@@ -42,6 +43,7 @@ const updateServerSchema = z.object({
   webhook_url: z.string().url().or(z.literal('')).nullable().optional(),
   config_json: z.string().optional(),
   server_type: z.enum(['Survival', 'Adventure/RPG', 'Creative', 'PvP', 'Minigames', 'Roleplay', 'Social', 'Sandbox', 'Other']).optional(),
+  server_version: z.string().optional(),
 });
 
 module.exports = function(db) {
@@ -138,14 +140,15 @@ module.exports = function(db) {
       }
 
       const stmt = db.prepare(`
-        INSERT INTO servers (name, slug, description, install_path, port, status, autostart, server_type)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO servers (name, slug, description, install_path, port, status, autostart, server_type, server_version)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       
       const port = validated.port || 25565;
       const autostartVal = (validated.autostart === true || validated.autostart === 1) ? 1 : 0;
       const serverTypeVal = validated.server_type || 'Survival';
-      const result = stmt.run(validated.name, validated.slug, validated.description || '', installPath, port, 'uninstalled', autostartVal, serverTypeVal);
+      const serverVersionVal = validated.server_version || 'Use Global Default';
+      const result = stmt.run(validated.name, validated.slug, validated.description || '', installPath, port, 'uninstalled', autostartVal, serverTypeVal, serverVersionVal);
       
       const serverId = result.lastInsertRowid;
 

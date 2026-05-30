@@ -39,6 +39,7 @@ export default function Dashboard() {
   const [port, setPort] = useState('25565');
   const [autostart, setAutostart] = useState(false);
   const [serverType, setServerType] = useState('Survival');
+  const [serverVersion, setServerVersion] = useState('Use Global Default');
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
 
@@ -100,7 +101,8 @@ export default function Dashboard() {
         description,
         port: parseInt(port, 10),
         autostart: !!autostart,
-        server_type: serverType
+        server_type: serverType,
+        server_version: serverVersion
       };
 
       await apiRequest('/servers', {
@@ -114,6 +116,7 @@ export default function Dashboard() {
       setPort('25565');
       setAutostart(false);
       setServerType('Survival');
+      setServerVersion('Use Global Default');
       setShowModal(false);
       
       // Refresh listing
@@ -713,6 +716,30 @@ export default function Dashboard() {
                   <option value="Social">Social</option>
                   <option value="Sandbox">Sandbox</option>
                   <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">Server Version</label>
+                <select
+                  value={serverVersion}
+                  onChange={(e) => setServerVersion(e.target.value)}
+                  disabled={creating}
+                  style={{
+                    backgroundColor: 'rgba(9, 10, 15, 0.6)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    fontSize: '14px',
+                    width: '100%',
+                    cursor: creating ? 'not-allowed' : 'default'
+                  }}
+                >
+                  <option value="Use Global Default">Use Global Default</option>
+                  <option value="latest">latest</option>
+                  <option value="0.2.0">0.2.0</option>
+                  <option value="0.1.0">0.1.0</option>
                 </select>
               </div>
 
