@@ -897,6 +897,9 @@ export default function ServerDetail() {
       setError('');
       const data = await apiRequest(`/servers/${id}`);
       setServer(data);
+      if (data && data.name) {
+        document.title = `${data.name} | Hytale Panel`;
+      }
       setPort(data.port);
       setAutostart(!!data.autostart);
       

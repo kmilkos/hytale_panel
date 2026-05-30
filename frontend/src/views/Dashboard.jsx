@@ -46,6 +46,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    document.title = 'Dashboard | Hytale Panel';
     const curUser = getUser();
     if (!curUser) {
       navigate('/login');

@@ -10,6 +10,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    document.title = 'Login | Hytale Panel';
     // Redirect if already logged in
     const user = getUser();
     if (user) navigate('/');

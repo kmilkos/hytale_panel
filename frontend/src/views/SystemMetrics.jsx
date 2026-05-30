@@ -16,6 +16,7 @@ export default function SystemMetrics() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    document.title = 'System Metrics | Hytale Panel';
     const curUser = getUser();
     if (!curUser) {
       navigate('/login');

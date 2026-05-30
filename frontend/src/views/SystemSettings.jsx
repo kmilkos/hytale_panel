@@ -43,6 +43,7 @@ export default function SystemSettings() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    document.title = 'System Settings | Hytale Panel';
     const curUser = getUser();
     if (!curUser) {
       navigate('/login');
