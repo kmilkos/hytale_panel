@@ -1,9 +1,11 @@
+import { showError } from './errorModal';
+
 const hostname = window.location.hostname || '127.0.0.1';
 const host = window.location.host || '127.0.0.1:5600';
 const cleanHostname = hostname === 'localhost' ? '127.0.0.1' : hostname;
 const cleanHost = host.startsWith('localhost') ? host.replace('localhost', '127.0.0.1') : host;
 
-import { showError } from './errorModal';
+export const API_BASE_URL = window.location.port === '5173'
   ? `http://${cleanHostname}:5600/api`
   : '/api';
 
