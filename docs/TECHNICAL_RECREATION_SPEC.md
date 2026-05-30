@@ -1,10 +1,10 @@
-# Hytale Cluster Manager Technical Recreation Specification
+# Hytale Panel Technical Recreation Specification
 
-This document describes the current Hytale Cluster Manager web app in enough detail for another engineer or AI system to recreate the application from scratch.
+This document describes the current Hytale Panel web app in enough detail for another engineer or AI system to recreate the application from scratch.
 
 ## 1. Product summary
 
-Hytale Cluster Manager is a self-hosted web control panel for managing multiple Hytale dedicated server instances from one browser UI. It provides authenticated administration, server lifecycle control, live console streaming, file management, backups, mod browsing/installing, mod compatibility checks, player administration, resource monitoring, and public server listing.
+Hytale Panel is a self-hosted web control panel for managing multiple Hytale dedicated server instances from one browser UI. It provides authenticated administration, server lifecycle control, live console streaming, file management, backups, mod browsing/installing, mod compatibility checks, player administration, resource monitoring, and public server listing.
 
 The application is a Node.js monorepo with:
 
@@ -12,7 +12,7 @@ The application is a Node.js monorepo with:
 - Frontend: React, Vite, React Router.
 - Runtime target: Linux server with systemd, Node.js 20+, Java 25+ for Hytale servers.
 
-The canonical deployment path is `/opt/hytale-manager`, but the user-facing product name is **Hytale Cluster Manager**.
+The canonical deployment path is `/opt/hytale-manager`, but the user-facing product name is **Hytale Panel**.
 
 ## 2. Core goals
 
@@ -1108,7 +1108,7 @@ Current CurseForge install rejects if a file with the same name already exists. 
 
 ### 21.7 Project naming
 
-User-facing name is Hytale Cluster Manager. Operational names and paths may still contain `hytale-manager`.
+User-facing name is Hytale Panel. Operational names and paths may still contain `hytale-manager`.
 
 ## 22. Minimum recreation checklist
 

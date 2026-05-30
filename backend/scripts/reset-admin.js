@@ -6,7 +6,7 @@ const dbConnector = require('../src/db');
 const config = require('../src/config');
 
 async function resetPassword() {
-  console.log('[*] Hytale Cluster Manager - Admin Password Reset Utility');
+  console.log('[*] Hytale Panel - Admin Password Reset Utility');
 
   const args = process.argv.slice(2);
   let newPassword = args[0];

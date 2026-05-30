@@ -98,7 +98,7 @@ async function startServer() {
     
     app.get('/api/public/info', (req, res) => {
       res.json({
-        appName: 'Hytale Cluster Manager',
+        appName: 'Hytale Panel',
         version: '1.0.0',
         environment: config.nodeEnv,
       });
@@ -236,11 +236,11 @@ async function startServer() {
     
     // 6. Start HTTP Server listening
     server.listen(config.port, config.host, () => {
-      logger.info(`Hytale Cluster Manager running at http://${config.host}:${config.port}`);
+      logger.info(`Hytale Panel running at http://${config.host}:${config.port}`);
     });
     
   } catch (err) {
-    logger.error('Failed to start Hytale Cluster Manager server', err);
+    logger.error('Failed to start Hytale Panel server', err);
     process.exit(1);
   }
 }

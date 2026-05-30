@@ -1,5 +1,5 @@
 #!/bin/bash
-# Hytale Cluster Manager - Linux Installer / Uninstaller
+# Hytale Panel - Linux Installer / Uninstaller
 # Supports Debian/Ubuntu (APT) and Fedora/CentOS/RHEL (DNF)
 set -e
 
@@ -23,7 +23,7 @@ log_banner() {
  |_| |_|\__, |_|_|\__\__,_|_|\___| |_|   \__,_|_| |_|\___|_|
         |___/                                             
 EOF
-  echo -e "        Hytale Cluster Manager Installer${COLOR_RESET}\n"
+  echo -e "        Hytale Panel Installer${COLOR_RESET}\n"
 }
 
 log_step() {
@@ -61,11 +61,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     -h|--help)
-      echo "Hytale Cluster Manager Installer"
+      echo "Hytale Panel Installer"
       echo "Usage: sudo ./install.sh [options]"
       echo "Options:"
       echo "  -v, --verbose     Show detailed output of all installation steps"
-      echo "  --uninstall       Uninstall the Hytale Cluster Manager service"
+      echo "  --uninstall       Uninstall the Hytale Panel service"
       echo "  -h, --help        Show this help message"
       exit 0
       ;;
@@ -128,7 +128,7 @@ run_cmd() {
 # UNINSTALL MODE
 if [ "$UNINSTALL" = true ]; then
   log_banner
-  log_info "Uninstalling Hytale Cluster Manager Service..."
+  log_info "Uninstalling Hytale Panel Service..."
   
   if [ -f "$SERVICE_FILE" ]; then
     log_step "Stopping service"
@@ -150,7 +150,7 @@ fi
 
 # INSTALL MODE
 log_banner
-log_info "Installing dependencies for Hytale Cluster Manager..."
+log_info "Installing dependencies for Hytale Panel..."
 
 # Detect OS
 if [ -f /etc/os-release ]; then
@@ -375,7 +375,7 @@ if command -v systemctl &>/dev/null && [ -d /run/systemd/system ]; then
   NODE_BIN=$(command -v node || which node || echo "/usr/bin/node")
   cat <<EOF > "$SERVICE_FILE"
 [Unit]
-Description=Hytale Cluster Manager Service
+Description=Hytale Panel Service
 After=network.target
 
 [Service]
@@ -393,17 +393,17 @@ EOF
   log_step "Reloading systemd daemon"
   run_cmd "systemctl daemon-reload"
 
-  log_step "Enabling and starting Hytale Cluster Manager service"
+  log_step "Enabling and starting Hytale Panel service"
   run_cmd "systemctl enable hytale-manager"
   run_cmd "systemctl start hytale-manager"
-  log_success "Hytale Cluster Manager service enabled and started successfully"
+  log_success "Hytale Panel service enabled and started successfully"
 else
   log_warning "Systemd is not running or not available. Skipping systemd service setup."
   log_info "You can run the application manually by navigating to ${APP_DIR}/backend and running: node src/server.js"
 fi
 
 echo -e "\n${COLOR_SUCCESS}================================================================${COLOR_RESET}"
-echo -e "${COLOR_SUCCESS}   SUCCESS: Hytale Cluster Manager installed successfully!      ${COLOR_RESET}"
+echo -e "${COLOR_SUCCESS}   SUCCESS: Hytale Panel installed successfully!      ${COLOR_RESET}"
 echo -e "${COLOR_SUCCESS}================================================================${COLOR_RESET}\n"
 echo -e "${COLOR_SECONDARY}➤ Access the panel at: ${COLOR_SUCCESS}http://127.0.0.1:5500${COLOR_RESET}"
 echo -e "${COLOR_SECONDARY}➤ Run log monitoring:   ${COLOR_PRIMARY}journalctl -u hytale-manager -f${COLOR_RESET}"

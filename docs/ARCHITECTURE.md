@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes the high-level design of the Hytale Cluster Manager:
+This document describes the high-level design of the Hytale Panel:
 the process model, the directory layout, and how the major subsystems
 (auth, server lifecycle, file manager, WebSocket) fit together.
 

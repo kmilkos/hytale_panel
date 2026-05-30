@@ -20,7 +20,7 @@ function Write-LogBanner {
     Write-Host " |  _  | |_| | | | || (_| | |  __/ |  __/ (_| | | | |  __/ |"
     Write-Host " |_| |_|\__, |_|_|\__\__,_|_|\___| |_|   \__,_|_| |_|\___|_|"
     Write-Host "        |___/"
-    Write-Host "        Hytale Cluster Manager Installer - Version 1.0.0${COLOR_RESET}`n"
+    Write-Host "        Hytale Panel Installer - Version 1.0.0${COLOR_RESET}`n"
 }
 
 function Write-LogStep ($Message) {
@@ -77,7 +77,7 @@ function Invoke-Cmd {
 # UNINSTALL MODE
 if ($Uninstall) {
     Write-LogBanner
-    Write-LogInfo "Uninstalling Hytale Cluster Manager service task..."
+    Write-LogInfo "Uninstalling Hytale Panel service task..."
     $task = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
     if ($task) {
         Write-LogStep "Stopping active instances of the task"
@@ -93,7 +93,7 @@ if ($Uninstall) {
 
 # INSTALL MODE
 Write-LogBanner
-Write-LogInfo "Installing dependencies for Hytale Cluster Manager..."
+Write-LogInfo "Installing dependencies for Hytale Panel..."
 if ($VerbosePreference -ne 'Continue') {
     Write-LogInfo "Detailed installation log is being written to: $LogPath"
 }
@@ -218,7 +218,7 @@ Write-LogSuccess "Background service task booted."
 
 Write-Host ""
 Write-Host "${COLOR_SUCCESS}================================================================${COLOR_RESET}"
-Write-Host "${COLOR_SUCCESS}   SUCCESS: Hytale Cluster Manager installed successfully!      ${COLOR_RESET}"
+Write-Host "${COLOR_SUCCESS}   SUCCESS: Hytale Panel installed successfully!      ${COLOR_RESET}"
 Write-Host "${COLOR_SUCCESS}================================================================${COLOR_RESET}`n"
 Write-Host "${COLOR_SECONDARY}➤ Access the panel at: ${COLOR_SUCCESS}http://127.0.0.1:5500${COLOR_RESET}"
 Write-Host "${COLOR_SECONDARY}➤ Stop background task: ${COLOR_PRIMARY}Stop-ScheduledTask -TaskName $TaskName${COLOR_RESET}"
