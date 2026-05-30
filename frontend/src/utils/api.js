@@ -65,8 +65,10 @@ export async function apiRequest(endpoint, options = {}) {
   try {
     res = await fetch(url, { ...options, headers, body });
   } catch (networkErr) {
-    // Show network error modal with details
-    showError('Cannot connect to the server. Please ensure the backend is running.', { details: networkErr.message });
+    // Show network error modal with details if not skipped
+    if (!options.skipErrorModal) {
+      showError('Cannot connect to the server. Please ensure the backend is running.', { details: networkErr.message });
+    }
     throw new Error(`Cannot connect to the server. Make sure the backend is running on port 5600. (${networkErr.message})`);
   }
 
@@ -81,9 +83,11 @@ export async function apiRequest(endpoint, options = {}) {
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
     const message = errData?.error?.message || errData?.message || `Server error ${res.status}: ${res.statusText}`;
-    // Show server error modal with details if available
+    // Show server error modal with details if available and not skipped
     const details = errData?.error?.details || JSON.stringify(errData);
-    showError(message, { details });
+    if (!options.skipErrorModal) {
+      showError(message, { details });
+    }
     throw new Error(message);
   }
 

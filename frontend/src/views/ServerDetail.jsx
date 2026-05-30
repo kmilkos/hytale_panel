@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest, API_BASE_URL, WS_BASE_URL, getToken, getUser } from '../utils/api';
 import { showConfirm, showModDeleteConfirm } from '../utils/confirm';
+import { showError } from '../utils/errorModal';
 
 export default function ServerDetail() {
   const { id } = useParams();
@@ -610,7 +611,7 @@ export default function ServerDetail() {
 
   const fetchLogs = async () => {
     try {
-      const data = await apiRequest(`/servers/${id}/logs?limit=200`);
+      const data = await apiRequest(`/servers/${id}/logs?limit=200`, { skipErrorModal: true });
       setLogs(data.map(log => log.line));
       scrollToConsoleBottom(true);
     } catch (err) {
@@ -979,8 +980,22 @@ export default function ServerDetail() {
       // Fallback HTTP command API
       apiRequest(`/servers/${id}/command`, {
         method: 'POST',
-        body: { command: command.trim() }
-      }).catch(err => alert(`Failed to send: ${err.message}`));
+        body: { command: command.trim() },
+        skipErrorModal: true
+      }).catch(err => {
+        const errorLine = `[System Command Error] Failed to execute /${command.trim()}: ${err.message}`;
+        setLogs(prev => [...prev, errorLine]);
+        
+        const newIssue = {
+          id: Math.random().toString(),
+          severity: 'error',
+          type: 'Command Execution Failure',
+          line: errorLine,
+          hint: 'The RCON console API call failed. Verify backend service is listening on port 5600 and server status is active.'
+        };
+        setDetectedIssues(prev => [newIssue, ...prev.slice(0, 9)]);
+        scrollToConsoleBottom();
+      });
     }
     
     setLogs(prev => [...prev, `> ${command}`]);
@@ -1218,7 +1233,7 @@ export default function ServerDetail() {
     try {
       const activeRange = rangeVal || metricsRangeRef.current;
       const limit = getMetricsLimit(activeRange);
-      const data = await apiRequest(`/servers/${id}/metrics?limit=${limit}`);
+      const data = await apiRequest(`/servers/${id}/metrics?limit=${limit}`, { skipErrorModal: true });
       setMetrics(data || []);
     } catch (err) {
       console.error(err);
@@ -2424,6 +2439,13 @@ export default function ServerDetail() {
                       <div style={{ borderTop: '1px dashed rgba(244, 63, 94, 0.2)', paddingTop: '6px', color: 'var(--text-muted)' }}>
                         <strong>Solution:</strong> {issue.hint}
                       </div>
+                      <button 
+                        onClick={() => showError(issue.hint, { title: issue.type || 'Crashed Log Pattern', details: issue.line })}
+                        className="btn btn-secondary"
+                        style={{ padding: '4px 10px', fontSize: '11px', marginTop: '8px', width: '100%', borderColor: 'rgba(244, 63, 94, 0.3)', color: 'var(--error)' }}
+                      >
+                        🔍 View Modal Details
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -4739,6 +4761,13 @@ export default function ServerDetail() {
                               style={{ padding: '4px 12px', fontSize: '11px' }}
                             >
                               📂 Browse Files
+                            </button>
+                            <button 
+                              onClick={() => showError(issue.hint, { title: issue.title || 'Log Exception Pattern', details: issue.line })}
+                              className="btn btn-primary"
+                              style={{ padding: '4px 12px', fontSize: '11px' }}
+                            >
+                              🔍 View Exception Details
                             </button>
                           </div>
                         </div>
