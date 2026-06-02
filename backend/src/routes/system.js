@@ -1,7 +1,7 @@
 const express = require('express');
 const os = require('os');
 const path = require('path');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const config = require('../config');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { HttpError } = require('../middleware/errorHandler');

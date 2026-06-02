@@ -33,7 +33,7 @@ if (!jwtSecret || jwtSecret.trim().length < 32) {
 const config = {
   nodeEnv: process.env.NODE_ENV || 'development',
   host: process.env.HOST || '127.0.0.1',
-  port: parseInt(process.env.PORT || '5500', 10),
+  port: parseInt(process.env.PORT || '5600', 10),
   dbPath: path.resolve(__dirname, '../../', process.env.DB_PATH || 'data/hytale-manager.db'),
   serversDir: path.resolve(__dirname, '../../../', process.env.SERVERS_DIR || 'servers'),
   uploadsDir: path.resolve(__dirname, '../../', process.env.UPLOADS_DIR || 'uploads'),

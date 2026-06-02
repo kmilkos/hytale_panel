@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.5.17",
-    "bcrypt": "^5.1.1",
+    "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.10.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
