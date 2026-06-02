@@ -27,82 +27,6 @@ module.exports = function(db) {
     return { modsDir, server };
   }
 
-  // GET /api/servers/:serverId/mods - List installed mods with status and db metadata
-  router.get('/server/:serverId', async (req, res, next) => {
-    const { serverId } = req.params;
-    try {
-      const { modsDir, server } = resolveModsDir(serverId);
-      const files = fs.readdirSync(modsDir);
-      
-      // Fetch installed mods records from DB
-      const dbMods = db.prepare('SELECT * FROM installed_mods WHERE server_id = ?').all(serverId);
-      const dbModsMap = new Map();
-      for (const m of dbMods) {
-        dbModsMap.set(m.file_name, m);
-      }
-
-      // Fetch conflicts
-      const conflicts = db.prepare('SELECT * FROM mod_conflicts WHERE server_id = ?').all(serverId);
-
-      const installedList = files.map(filename => {
-        const fullPath = path.join(modsDir, filename);
-        const stat = fs.statSync(fullPath);
-        if (stat.isDirectory()) return null; // Only files for now
-
-        const isActive = !filename.endsWith('.disabled');
-        const cleanName = filename.replace('.disabled', '');
-        
-        // Match with DB metadata
-        const dbMeta = dbModsMap.get(cleanName) || dbModsMap.get(filename);
-        
-        // Find if this mod is involved in any active conflicts
-        const modConflicts = conflicts.filter(c => 
-          c.mod1_name === cleanName || 
-          c.mod1_name === dbMeta?.mod_name ||
-          c.mod2_name === cleanName ||
-          c.mod2_name === dbMeta?.mod_name
-        );
-
-        // Check for associated configuration or data folders
-        const cleanDirName = cleanName.replace(/\.(jar|zip)$/i, '');
-        const foldersToCheck = [
-          path.join(modsDir, cleanDirName),
-          path.join(modsDir, 'config', cleanDirName)
-        ];
-        const associatedFolders = [];
-        for (const fPath of foldersToCheck) {
-          if (fs.existsSync(fPath) && fs.statSync(fPath).isDirectory()) {
-            associatedFolders.push(path.relative(server.install_path, fPath));
-          }
-        }
-
-        return {
-          fileName: filename,
-          isActive,
-          size: stat.size,
-          mtime: stat.mtime,
-          modId: dbMeta?.curseforge_mod_id || 'manual',
-          fileId: dbMeta?.curseforge_file_id || 'manual',
-          name: dbMeta?.mod_name || cleanName.replace(/\.(jar|zip)$/i, '').replace(/[-_]/g, ' '),
-          sha1: dbMeta?.sha1 || null,
-          cdnUrl: dbMeta?.cdn_url || null,
-          associatedFolders,
-          conflicts: modConflicts.map(c => ({
-            type: c.conflict_type,
-            severity: c.severity,
-            details: c.details
-          }))
-        };
-      }).filter(Boolean);
-
-      res.json({
-        mods: installedList,
-        conflictsCount: conflicts.length
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
 
   // POST /api/servers/:serverId/mods/toggle - Toggle mod (.disabled extension toggle)
   router.post('/server/:serverId/toggle', async (req, res, next) => {
@@ -531,6 +455,83 @@ module.exports = function(db) {
 
       writeStream.on('error', (err) => {
         next(new HttpError(500, `Mod upload stream failed: ${err.message}`));
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/servers/:serverId/mods - List installed mods with status and db metadata
+  router.get('/server/:serverId', async (req, res, next) => {
+    const { serverId } = req.params;
+    try {
+      const { modsDir, server } = resolveModsDir(serverId);
+      const files = fs.readdirSync(modsDir);
+      
+      // Fetch installed mods records from DB
+      const dbMods = db.prepare('SELECT * FROM installed_mods WHERE server_id = ?').all(serverId);
+      const dbModsMap = new Map();
+      for (const m of dbMods) {
+        dbModsMap.set(m.file_name, m);
+      }
+
+      // Fetch conflicts
+      const conflicts = db.prepare('SELECT * FROM mod_conflicts WHERE server_id = ?').all(serverId);
+
+      const installedList = files.map(filename => {
+        const fullPath = path.join(modsDir, filename);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) return null; // Only files for now
+
+        const isActive = !filename.endsWith('.disabled');
+        const cleanName = filename.replace('.disabled', '');
+        
+        // Match with DB metadata
+        const dbMeta = dbModsMap.get(cleanName) || dbModsMap.get(filename);
+        
+        // Find if this mod is involved in any active conflicts
+        const modConflicts = conflicts.filter(c => 
+          c.mod1_name === cleanName || 
+          c.mod1_name === dbMeta?.mod_name ||
+          c.mod2_name === cleanName ||
+          c.mod2_name === dbMeta?.mod_name
+        );
+
+        // Check for associated configuration or data folders
+        const cleanDirName = cleanName.replace(/\.(jar|zip)$/i, '');
+        const foldersToCheck = [
+          path.join(modsDir, cleanDirName),
+          path.join(modsDir, 'config', cleanDirName)
+        ];
+        const associatedFolders = [];
+        for (const fPath of foldersToCheck) {
+          if (fs.existsSync(fPath) && fs.statSync(fPath).isDirectory()) {
+            associatedFolders.push(path.relative(server.install_path, fPath));
+          }
+        }
+
+        return {
+          fileName: filename,
+          isActive,
+          size: stat.size,
+          mtime: stat.mtime,
+          modId: dbMeta?.curseforge_mod_id || 'manual',
+          fileId: dbMeta?.curseforge_file_id || 'manual',
+          name: dbMeta?.mod_name || cleanName.replace(/\.(jar|zip)$/i, '').replace(/[-_]/g, ' '),
+          sha1: dbMeta?.sha1 || null,
+          cdnUrl: dbMeta?.cdn_url || null,
+          associatedFolders,
+          conflicts: modConflicts.map(c => ({
+            type: c.conflict_type,
+            severity: c.severity,
+            details: c.details
+          }))
+        };
+      }).filter(Boolean);
+
+      res.json({
+        mods: installedList,
+        conflictsCount: conflicts.length
       });
     } catch (err) {
       next(err);
