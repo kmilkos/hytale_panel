@@ -213,10 +213,11 @@ export default function SystemSettings() {
     e.preventDefault();
     setInstallerError('');
     setDownloadingInstaller(true);
+    const finalUrl = installerUrl.trim() || 'https://downloader.hytale.com/hytale-downloader.zip';
     try {
       await apiRequest('/system/download-installer', {
         method: 'POST',
-        body: { downloadUrl: installerUrl }
+        body: { downloadUrl: finalUrl }
       });
       fetchInstallerStatus();
     } catch (err) {
@@ -526,7 +527,6 @@ export default function SystemSettings() {
                       value={installerUrl}
                       onChange={(e) => setInstallerUrl(e.target.value)}
                       disabled={downloadingInstaller}
-                      required
                     />
                     <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>
                       Enter the direct URL to the Hytale Downloader utility ZIP archive. This utility will automatically run, prompt for verification, and compile the server cache.

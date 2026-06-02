@@ -223,7 +223,7 @@ module.exports = function(db) {
       }
       
       if (!url) {
-        throw new HttpError(400, 'Hytale installer download URL is not configured. Please supply a URL.');
+        url = 'https://downloader.hytale.com/hytale-downloader.zip';
       }
 
       db.prepare(`
