@@ -614,13 +614,67 @@ module.exports = function(db) {
   });
 
   // GET /api/system/update-check - Check panel software updates
-  router.get('/update-check', (req, res) => {
-    res.json({
-      currentVersion: '1.0.0',
-      latestVersion: '1.0.0',
-      needsUpdate: false,
-      changelog: 'No updates available. You are running the latest stable release.',
-    });
+  router.get('/update-check', async (req, res) => {
+    try {
+      const rootPkg = require('../../../package.json');
+      const currentVersion = rootPkg.version || '1.0.1';
+      
+      let latestVersion = currentVersion;
+      let changelog = 'No updates available. You are running the latest stable release.';
+      let needsUpdate = false;
+
+      try {
+        const response = await fetch('https://raw.githubusercontent.com/kmilkos/hytale_panel/main/package.json', {
+          headers: { 'User-Agent': 'Hytale-Cluster-Manager-Panel' },
+          signal: AbortSignal.timeout(5000) // 5s timeout
+        });
+        if (response.ok) {
+          const githubPkg = await response.json();
+          if (githubPkg && githubPkg.version) {
+            latestVersion = githubPkg.version;
+            
+            // Compare versions (semver check)
+            const parseVersion = (v) => v.split('.').map(Number);
+            const curr = parseVersion(currentVersion);
+            const lat = parseVersion(latestVersion);
+            
+            let isNewer = false;
+            for (let i = 0; i < 3; i++) {
+              const c = curr[i] || 0;
+              const l = lat[i] || 0;
+              if (l > c) {
+                isNewer = true;
+                break;
+              } else if (l < c) {
+                break;
+              }
+            }
+            
+            if (isNewer) {
+              needsUpdate = true;
+              changelog = `A new update (v${latestVersion}) is available on GitHub! Please pull the latest changes to update your panel.`;
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Failed to check for updates on GitHub:', err.message);
+        changelog = `Failed to check for updates: ${err.message}. Local version is ${currentVersion}.`;
+      }
+
+      res.json({
+        currentVersion,
+        latestVersion,
+        needsUpdate,
+        changelog,
+      });
+    } catch (err) {
+      res.json({
+        currentVersion: '1.0.1',
+        latestVersion: '1.0.1',
+        needsUpdate: false,
+        changelog: `Failed to retrieve version information: ${err.message}`,
+      });
+    }
   });
 
   return router;
