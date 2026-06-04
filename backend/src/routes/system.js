@@ -1,6 +1,7 @@
 const express = require('express');
 const os = require('os');
 const path = require('path');
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const config = require('../config');
 const { requireAuth, requireRole } = require('../middleware/auth');
@@ -10,6 +11,7 @@ const {
   getInstallerDownloadState,
   cacheInstaller,
   getDiskUsage,
+  abortInstaller,
 } = require('../services/serverService');
 
 module.exports = function(db) {
@@ -193,10 +195,82 @@ module.exports = function(db) {
     }
   });
 
+  // GET /api/system/versions - List available cached Hytale server versions
+  router.get('/versions', (req, res, next) => {
+    try {
+      const versions = [];
+
+      // 1. Get patchlines: release and pre-release
+      const patchlines = ['release', 'pre-release'];
+      for (const pl of patchlines) {
+        let isCached = false;
+        let resolvedVersion = null;
+        try {
+          const cachedRow = db.prepare("SELECT version FROM cached_versions WHERE patchline = ? ORDER BY id DESC LIMIT 1").get(pl);
+          if (cachedRow) {
+            resolvedVersion = cachedRow.version;
+            isCached = isInstallerCached(resolvedVersion);
+          }
+        } catch (_) {}
+        versions.push({
+          version: pl,
+          isCached,
+          isPatchline: true,
+          resolvedVersion
+        });
+      }
+
+      // 2. Query all mapped versions from database
+      let dbRows = [];
+      try {
+        dbRows = db.prepare('SELECT version, patchline FROM cached_versions ORDER BY id DESC').all();
+      } catch (_) {
+        // Table might not be ready or empty
+      }
+
+      for (const row of dbRows) {
+        const isCached = isInstallerCached(row.version);
+        versions.push({
+          version: row.version,
+          isCached,
+          isPatchline: false,
+          patchline: row.patchline
+        });
+      }
+
+      // 3. Scan physical folders in versions directory to find any other untracked versions
+      const sharedDir = path.join(__dirname, '..', '..', '..', 'shared');
+      const versionsDir = path.join(sharedDir, 'versions');
+      if (fs.existsSync(versionsDir)) {
+        const items = fs.readdirSync(versionsDir);
+        for (const item of items) {
+          const itemPath = path.join(versionsDir, item);
+          if (fs.statSync(itemPath).isDirectory()) {
+            if (!versions.find(v => v.version === item)) {
+              const isCached = isInstallerCached(item);
+              versions.push({
+                version: item,
+                isCached,
+                isPatchline: false
+              });
+            }
+          }
+        }
+      }
+
+      res.json(versions);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   // GET /api/system/installer-status - Check if central installer is ready
   router.get('/installer-status', (req, res, next) => {
+    const { version = 'release' } = req.query;
     try {
-      const isCached = isInstallerCached();
+      let targetVersion = version;
+      if (targetVersion === 'latest') targetVersion = 'release';
+      const isCached = isInstallerCached(db, targetVersion);
       const state = getInstallerDownloadState();
       
       const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('hytale_installer_url');
@@ -214,7 +288,7 @@ module.exports = function(db) {
 
   // POST /api/system/download-installer - Trigger background download & cache
   router.post('/download-installer', async (req, res, next) => {
-    const { downloadUrl } = req.body;
+    const { downloadUrl, version = 'release' } = req.body;
     try {
       let url = downloadUrl;
       if (!url) {
@@ -232,12 +306,29 @@ module.exports = function(db) {
         ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
       `).run(url);
 
-      const result = await cacheInstaller(db, url);
+      let patchline = version;
+      if (patchline === 'latest') patchline = 'release';
+
+      const result = await cacheInstaller(db, url, patchline);
       
       db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
         .run(req.user.sub, 'download-installer', 'system', `Triggered Hytale installer cache from ${url}`, req.ip);
 
       res.status(202).json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/system/abort-installer - Terminate active installer download/process
+  router.post('/abort-installer', async (req, res, next) => {
+    try {
+      const result = await abortInstaller();
+      
+      db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
+        .run(req.user.sub, 'abort-installer', 'system', 'Manually aborted Hytale installer process', req.ip);
+
+      res.json(result);
     } catch (err) {
       next(err);
     }

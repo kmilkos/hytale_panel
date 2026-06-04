@@ -244,7 +244,7 @@ export default function SystemMetrics() {
         </div>
 
         {/* Resources Metrics Summary */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '24px' }}>
           {/* Card 1: Overall CPU */}
           <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -255,7 +255,7 @@ export default function SystemMetrics() {
               {stats ? `${getOverallCpuPercentage()}%` : '0%'}
             </div>
             <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ width: stats ? `${getOverallCpuPercentage()}%` : '0%', height: '100%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981', transition: 'width 0.5s ease' }}></div>
+              <div style={{ width: '100%', transform: `scaleX(${stats ? getOverallCpuPercentage() / 100 : 0})`, transformOrigin: 'left', height: '100%', backgroundColor: '#10b981', boxShadow: '0 0 8px #10b981', transition: 'transform 0.5s ease' }}></div>
             </div>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
               {stats ? `${stats.cpuCores} Cores - ${stats.cpuModel}` : 'Awaiting stats...'}
@@ -272,7 +272,7 @@ export default function SystemMetrics() {
               {stats ? `${stats.memory.percentage}%` : '0%'}
             </div>
             <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
-              <div style={{ width: stats ? `${stats.memory.percentage}%` : '0%', height: '100%', backgroundColor: '#3b82f6', boxShadow: '0 0 8px #3b82f6', transition: 'width 0.5s ease' }}></div>
+              <div style={{ width: '100%', transform: `scaleX(${stats ? stats.memory.percentage / 100 : 0})`, transformOrigin: 'left', height: '100%', backgroundColor: '#3b82f6', boxShadow: '0 0 8px #3b82f6', transition: 'transform 0.5s ease' }}></div>
             </div>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
               {stats ? (
@@ -299,13 +299,13 @@ export default function SystemMetrics() {
             </div>
             <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
               <div style={{
-                width: stats && stats.disk && stats.disk.total > 0
-                  ? `${Math.round((stats.disk.used / stats.disk.total) * 100)}%`
-                  : '0%',
+                width: '100%',
+                transform: `scaleX(${stats && stats.disk && stats.disk.total > 0 ? (stats.disk.used / stats.disk.total) : 0})`,
+                transformOrigin: 'left',
                 height: '100%',
                 backgroundColor: '#eab308',
                 boxShadow: '0 0 8px #eab308',
-                transition: 'width 0.5s ease'
+                transition: 'transform 0.5s ease'
               }}></div>
             </div>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', justifyContent: 'space-between' }}>
@@ -331,11 +331,13 @@ export default function SystemMetrics() {
             </div>
             <div style={{ width: '100%', height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
               <div style={{
-                width: stats && stats.activeInstances ? `${Math.min(100, stats.activeInstances.length * 20)}%` : '0%',
+                width: '100%',
+                transform: `scaleX(${stats && stats.activeInstances ? Math.min(100, stats.activeInstances.length * 20) / 100 : 0})`,
+                transformOrigin: 'left',
                 height: '100%',
                 backgroundColor: '#ec4899',
                 boxShadow: '0 0 8px #ec4899',
-                transition: 'width 0.5s ease'
+                transition: 'transform 0.5s ease'
               }}></div>
             </div>
             <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
@@ -347,7 +349,7 @@ export default function SystemMetrics() {
         </div>
 
         {/* Middle Section: CPU Cores Load & Hytale Processes Footprint */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(450px, 1fr))', gap: '32px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 450px), 1fr))', gap: '32px' }}>
           {/* Logical Core Threads Monitor */}
           <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', margin: 0 }}>
@@ -355,7 +357,7 @@ export default function SystemMetrics() {
             </h3>
 
             {stats && stats.cpus ? (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))', gap: '16px' }}>
                 {stats.cpus.map((core, i) => {
                   const usage = coreUsages[i] || 0;
                   return (
@@ -365,7 +367,7 @@ export default function SystemMetrics() {
                         <span style={{ fontWeight: 'bold', color: '#10b981' }}>{usage}%</span>
                       </div>
                       <div style={{ width: '100%', height: '6px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '3px', overflow: 'hidden' }}>
-                        <div style={{ width: `${usage}%`, height: '100%', backgroundColor: '#10b981', transition: 'width 0.3s ease' }}></div>
+                        <div style={{ width: '100%', transform: `scaleX(${usage / 100})`, transformOrigin: 'left', height: '100%', backgroundColor: '#10b981', transition: 'transform 0.3s ease' }}></div>
                       </div>
                       <div style={{ fontSize: '9px', color: 'var(--text-dark)', marginTop: '4px', textAlign: 'right' }}>
                         {core.speed} MHz
@@ -404,10 +406,10 @@ export default function SystemMetrics() {
                           <strong style={{ color: '#10b981' }}>{srv.cpu}%</strong>
                         </div>
                         <div style={{ width: '100%', height: '5px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '2.5px', overflow: 'hidden' }}>
-                          <div style={{ width: `${srv.cpu}%`, height: '100%', backgroundColor: '#10b981' }}></div>
+                          <div style={{ width: '100%', transform: `scaleX(${srv.cpu / 100})`, transformOrigin: 'left', height: '100%', backgroundColor: '#10b981', transition: 'transform 0.3s ease' }}></div>
                         </div>
                       </div>
-
+ 
                       {/* Memory usage bar */}
                       <div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)', marginBottom: '4px' }}>
@@ -415,7 +417,7 @@ export default function SystemMetrics() {
                           <strong style={{ color: '#3b82f6' }}>{formatGB(srv.ram)}</strong>
                         </div>
                         <div style={{ width: '100%', height: '5px', backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: '2.5px', overflow: 'hidden' }}>
-                          <div style={{ width: `${Math.min(100, (srv.ram / (1024 * 1024 * 1024)) * 25)}%`, height: '100%', backgroundColor: '#3b82f6' }}></div>
+                          <div style={{ width: '100%', transform: `scaleX(${Math.min(100, (srv.ram / (1024 * 1024 * 1024)) * 25) / 100})`, transformOrigin: 'left', height: '100%', backgroundColor: '#3b82f6', transition: 'transform 0.3s ease' }}></div>
                         </div>
                       </div>
                     </div>

@@ -30,6 +30,15 @@ const createServerSchema = z.object({
   autostart: z.union([z.boolean(), z.number().int().min(0).max(1)]).optional(),
   server_type: z.enum(['Survival', 'Adventure/RPG', 'Creative', 'PvP', 'Minigames', 'Roleplay', 'Social', 'Sandbox', 'Other']).optional(),
   server_version: z.string().optional(),
+  serverName: z.string().optional(),
+  motd: z.string().optional(),
+  password: z.string().optional(),
+  maxPlayers: z.number().int().min(1).optional(),
+  maxViewRadius: z.number().int().min(1).optional(),
+  localCompressionEnabled: z.boolean().optional(),
+  displayTmpTagsInStrings: z.boolean().optional(),
+  world: z.string().optional(),
+  gameMode: z.string().optional(),
 });
 
 const updateServerSchema = z.object({
@@ -138,6 +147,22 @@ module.exports = function(db) {
       if (!fs.existsSync(installPath)) {
         fs.mkdirSync(installPath, { recursive: true });
       }
+
+      // Write settings.json
+      const settingsObj = {
+        ServerName: validated.serverName || validated.name || "Hytale Server",
+        MOTD: validated.motd || "",
+        Password: validated.password || "",
+        MaxPlayers: validated.maxPlayers !== undefined ? validated.maxPlayers : 100,
+        MaxViewRadius: validated.maxViewRadius !== undefined ? validated.maxViewRadius : 32,
+        LocalCompressionEnabled: !!validated.localCompressionEnabled,
+        DisplayTmpTagsInStrings: !!validated.displayTmpTagsInStrings,
+        Defaults: {
+          World: validated.world || "default",
+          GameMode: validated.gameMode || "Adventure"
+        }
+      };
+      fs.writeFileSync(path.join(installPath, 'settings.json'), JSON.stringify(settingsObj, null, 2), 'utf8');
 
       const stmt = db.prepare(`
         INSERT INTO servers (name, slug, description, install_path, port, status, autostart, server_type, server_version)
@@ -685,9 +710,9 @@ module.exports = function(db) {
     try {
       const server = getServer(db, id);
       const targetDir = path.resolve(server.install_path);
-      const files = ['server.json', 'game.json'].filter(f => fs.existsSync(path.join(targetDir, f)));
+      const files = ['settings.json', 'server.json', 'game.json'].filter(f => fs.existsSync(path.join(targetDir, f)));
       
-      res.json(files.length > 0 ? files : ['server.json']);
+      res.json(files.length > 0 ? files : ['settings.json', 'server.json']);
     } catch (err) {
       next(err);
     }
@@ -698,7 +723,7 @@ module.exports = function(db) {
     const id = parseInt(req.params.id, 10);
     const { filename } = req.params;
     try {
-      if (!['server.json', 'game.json'].includes(filename)) {
+      if (!['settings.json', 'server.json', 'game.json'].includes(filename)) {
         throw new HttpError(400, 'Invalid configuration filename.');
       }
       const server = getServer(db, id);
@@ -712,7 +737,21 @@ module.exports = function(db) {
           configObj = {};
         }
       } else {
-        if (filename === 'server.json') {
+        if (filename === 'settings.json') {
+          configObj = {
+            ServerName: server.name,
+            MOTD: "",
+            Password: "",
+            MaxPlayers: 100,
+            MaxViewRadius: 32,
+            LocalCompressionEnabled: false,
+            DisplayTmpTagsInStrings: false,
+            Defaults: {
+              World: "default",
+              GameMode: "Adventure"
+            }
+          };
+        } else if (filename === 'server.json') {
           configObj = {
             serverName: server.name,
             description: server.description || '',
@@ -736,7 +775,7 @@ module.exports = function(db) {
     const { filename } = req.params;
     const newConfig = req.body;
     try {
-      if (!['server.json', 'game.json'].includes(filename)) {
+      if (!['settings.json', 'server.json', 'game.json'].includes(filename)) {
         throw new HttpError(400, 'Invalid configuration filename.');
       }
       if (!newConfig || typeof newConfig !== 'object') {

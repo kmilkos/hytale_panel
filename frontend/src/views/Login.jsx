@@ -50,7 +50,7 @@ export default function Login() {
       justifyContent: 'center',
       minHeight: '100vh',
       padding: '20px',
-      background: 'radial-gradient(circle at center, #181b29 0%, #090a0f 100%)'
+      background: 'radial-gradient(circle at center, var(--bg-panel) 0%, var(--bg-dark) 100%)'
     }}>
       <div className="modal-content animate-fade-in" style={{ maxWidth: '420px', margin: 0 }}>
         <div style={{ textAlign: 'center', marginBottom: '24px' }}>

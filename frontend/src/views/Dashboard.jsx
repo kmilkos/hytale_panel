@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiRequest, getUser, clearToken } from '../utils/api';
 import { 
@@ -42,6 +42,18 @@ export default function Dashboard() {
   const [serverVersion, setServerVersion] = useState('Use Global Default');
   const [createError, setCreateError] = useState('');
   const [creating, setCreating] = useState(false);
+  const [hytaleVersions, setHytaleVersions] = useState([]);
+
+  // New Hytale settings.json States
+  const [settingsServerName, setSettingsServerName] = useState('Hytale Server');
+  const [motd, setMotd] = useState('');
+  const [password, setPassword] = useState('');
+  const [maxPlayers, setMaxPlayers] = useState(100);
+  const [maxViewRadius, setMaxViewRadius] = useState(32);
+  const [localCompressionEnabled, setLocalCompressionEnabled] = useState(false);
+  const [displayTmpTagsInStrings, setDisplayTmpTagsInStrings] = useState(false);
+  const [world, setWorld] = useState('default');
+  const [gameMode, setGameMode] = useState('Adventure');
 
   const navigate = useNavigate();
 
@@ -54,6 +66,7 @@ export default function Dashboard() {
       setUser(curUser);
       fetchServers();
       fetchSystemStats();
+      fetchHytaleVersions();
 
       // Poll server status and metrics every 10 seconds in the background
       const intervalId = setInterval(() => {
@@ -64,6 +77,20 @@ export default function Dashboard() {
       return () => clearInterval(intervalId);
     }
   }, [navigate]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowModal(false);
+      }
+    };
+    if (showModal) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showModal]);
 
   const fetchServers = async () => {
     try {
@@ -86,6 +113,15 @@ export default function Dashboard() {
     }
   };
 
+  const fetchHytaleVersions = async () => {
+    try {
+      const data = await apiRequest('/system/versions');
+      setHytaleVersions(data || []);
+    } catch (err) {
+      console.error('Failed to fetch Hytale versions:', err);
+    }
+  };
+
   const handleLogout = () => {
     clearToken();
     navigate('/login');
@@ -103,7 +139,16 @@ export default function Dashboard() {
         port: parseInt(port, 10),
         autostart: !!autostart,
         server_type: serverType,
-        server_version: serverVersion
+        server_version: serverVersion,
+        serverName: settingsServerName,
+        motd,
+        password,
+        maxPlayers: parseInt(maxPlayers, 10) || 100,
+        maxViewRadius: parseInt(maxViewRadius, 10) || 32,
+        localCompressionEnabled: !!localCompressionEnabled,
+        displayTmpTagsInStrings: !!displayTmpTagsInStrings,
+        world,
+        gameMode
       };
 
       await apiRequest('/servers', {
@@ -118,6 +163,15 @@ export default function Dashboard() {
       setAutostart(false);
       setServerType('Survival');
       setServerVersion('Use Global Default');
+      setSettingsServerName('Hytale Server');
+      setMotd('');
+      setPassword('');
+      setMaxPlayers(100);
+      setMaxViewRadius(32);
+      setLocalCompressionEnabled(false);
+      setDisplayTmpTagsInStrings(false);
+      setWorld('default');
+      setGameMode('Adventure');
       setShowModal(false);
       
       // Refresh listing
@@ -170,18 +224,25 @@ export default function Dashboard() {
   };
 
   // Filtering criteria
-  const filteredServers = servers.filter((srv) => {
-    const matchesSearch = 
-      srv.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (srv.description && srv.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (srv.port && String(srv.port).includes(searchTerm));
-    
-    if (statusFilter === 'all') return matchesSearch;
-    return srv.status === statusFilter && matchesSearch;
-  });
+  const filteredServers = useMemo(() => {
+    return servers.filter((srv) => {
+      const matchesSearch = 
+        srv.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (srv.description && srv.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+        (srv.port && String(srv.port).includes(searchTerm));
+      
+      if (statusFilter === 'all') return matchesSearch;
+      return srv.status === statusFilter && matchesSearch;
+    });
+  }, [servers, searchTerm, statusFilter]);
 
-  const totalPlayersCount = servers.reduce((acc, srv) => acc + (srv.onlinePlayers?.length || 0), 0);
-  const activeServersCount = servers.filter((srv) => srv.isRunning).length;
+  const totalPlayersCount = useMemo(() => {
+    return servers.reduce((acc, srv) => acc + (srv.onlinePlayers?.length || 0), 0);
+  }, [servers]);
+
+  const activeServersCount = useMemo(() => {
+    return servers.filter((srv) => srv.isRunning).length;
+  }, [servers]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', backgroundColor: 'var(--bg-dark)' }}>
@@ -287,6 +348,8 @@ export default function Dashboard() {
             <Search className="search-input-icon" size={16} />
             <input
               type="text"
+              id="server-search-input"
+              aria-label="Search server instances by name, description, or port"
               placeholder="Search by name, description or port..."
               className="form-input"
               value={searchTerm}
@@ -371,7 +434,7 @@ export default function Dashboard() {
           /* Grid View Layout */
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 340px), 1fr))',
             gap: '24px'
           }}>
             {filteredServers.map((srv) => {
@@ -384,6 +447,15 @@ export default function Dashboard() {
                 <div 
                   key={srv.id} 
                   onClick={() => navigate(`/servers/${srv.id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate(`/servers/${srv.id}`);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Manage server ${srv.name}, status is ${srv.status}`}
                   className={`pretty-card animate-fade-in ${themeClass}`}
                 >
                   <div>
@@ -432,7 +504,7 @@ export default function Dashboard() {
                           <div className="metric-bar-track">
                             <div 
                               className="metric-bar-fill cpu" 
-                              style={{ width: `${Math.min(100, srv.metrics.cpu_percentage || 0)}%` }}
+                              style={{ transform: `scaleX(${(Math.min(100, srv.metrics.cpu_percentage || 0)) / 100})` }}
                             ></div>
                           </div>
                         </div>
@@ -445,7 +517,7 @@ export default function Dashboard() {
                           <div className="metric-bar-track">
                             <div 
                               className="metric-bar-fill ram" 
-                              style={{ width: srv.metrics.ram_bytes ? '65%' : '0%' }}
+                              style={{ transform: `scaleX(${srv.metrics.ram_bytes ? 0.65 : 0})` }}
                             ></div>
                           </div>
                         </div>
@@ -530,7 +602,19 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {filteredServers.map((srv) => (
-                  <tr key={srv.id} onClick={() => navigate(`/servers/${srv.id}`)}>
+                  <tr 
+                    key={srv.id} 
+                    onClick={() => navigate(`/servers/${srv.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(`/servers/${srv.id}`);
+                      }
+                    }}
+                    tabIndex={0}
+                    role="button"
+                    aria-label={`Manage server ${srv.name}, status is ${srv.status}`}
+                  >
                     <td style={{ fontWeight: '600' }}>
                       <div>{srv.name}</div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: '400', marginTop: '2px' }}>
@@ -559,7 +643,7 @@ export default function Dashboard() {
                         <div className="dense-progress-mini">
                           <span style={{ fontSize: '11px', fontWeight: 'bold', width: '32px' }}>{srv.metrics.cpu_percentage || 0}%</span>
                           <div className="dense-progress-bar">
-                            <div className="dense-progress-fill" style={{ width: `${Math.min(100, srv.metrics.cpu_percentage || 0)}%`, background: 'var(--secondary)' }}></div>
+                            <div className="dense-progress-fill" style={{ transform: `scaleX(${(Math.min(100, srv.metrics.cpu_percentage || 0)) / 100})`, background: 'var(--secondary)' }}></div>
                           </div>
                         </div>
                       ) : (
@@ -571,7 +655,7 @@ export default function Dashboard() {
                         <div className="dense-progress-mini">
                           <span style={{ fontSize: '11px', fontWeight: 'bold', width: '48px' }}>{formatRAM(srv.metrics.ram_bytes)}</span>
                           <div className="dense-progress-bar">
-                            <div className="dense-progress-fill" style={{ width: srv.metrics.ram_bytes ? '65%' : '0%', background: '#8b5cf6' }}></div>
+                            <div className="dense-progress-fill" style={{ transform: `scaleX(${srv.metrics.ram_bytes ? 0.65 : 0})`, background: '#8b5cf6' }}></div>
                           </div>
                         </div>
                       ) : (
@@ -635,9 +719,9 @@ export default function Dashboard() {
 
       {/* Create Server Modal */}
       {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="create-server-title">
+          <div className="modal-content" style={{ maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto' }}>
+            <h3 id="create-server-title" style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
               Create New Server Profile
             </h3>
 
@@ -657,13 +741,19 @@ export default function Dashboard() {
 
             <form onSubmit={handleCreateServer}>
               <div className="form-group">
-                <label className="form-label">Server Name</label>
+                <label className="form-label" htmlFor="server-create-name">Server Name</label>
                 <input
                   type="text"
+                  id="server-create-name"
                   className="form-input"
                   placeholder="e.g. Orbis Survival"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    setName(e.target.value);
+                    if (settingsServerName === 'Hytale Server' || settingsServerName === name) {
+                      setSettingsServerName(e.target.value);
+                    }
+                  }}
                   required
                   disabled={creating}
                 />
@@ -675,8 +765,9 @@ export default function Dashboard() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Description</label>
+                <label className="form-label" htmlFor="server-create-description">Description</label>
                 <textarea
+                  id="server-create-description"
                   className="form-input"
                   placeholder="Add details about your community or rules"
                   value={description}
@@ -687,9 +778,10 @@ export default function Dashboard() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Port</label>
+                <label className="form-label" htmlFor="server-create-port">Port</label>
                 <input
                   type="number"
+                  id="server-create-port"
                   className="form-input"
                   placeholder="25565"
                   value={port}
@@ -700,13 +792,14 @@ export default function Dashboard() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Server Type</label>
+                <label className="form-label" htmlFor="server-create-type">Server Type</label>
                 <select
+                  id="server-create-type"
                   value={serverType}
                   onChange={(e) => setServerType(e.target.value)}
                   disabled={creating}
                   style={{
-                    backgroundColor: 'rgba(9, 10, 15, 0.6)',
+                    backgroundColor: 'color-mix(in srgb, var(--bg-dark) 60%, transparent)',
                     color: 'var(--text-main)',
                     border: '1px solid var(--border)',
                     padding: '12px',
@@ -729,13 +822,14 @@ export default function Dashboard() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Server Version</label>
+                <label className="form-label" htmlFor="server-create-version">Server Version</label>
                 <select
+                  id="server-create-version"
                   value={serverVersion}
                   onChange={(e) => setServerVersion(e.target.value)}
                   disabled={creating}
                   style={{
-                    backgroundColor: 'rgba(9, 10, 15, 0.6)',
+                    backgroundColor: 'color-mix(in srgb, var(--bg-dark) 60%, transparent)',
                     color: 'var(--text-main)',
                     border: '1px solid var(--border)',
                     padding: '12px',
@@ -746,10 +840,148 @@ export default function Dashboard() {
                   }}
                 >
                   <option value="Use Global Default">Use Global Default</option>
-                  <option value="latest">latest</option>
-                  <option value="0.2.0">0.2.0</option>
-                  <option value="0.1.0">0.1.0</option>
+                  {hytaleVersions.map((v) => (
+                    <option key={v.version} value={v.version}>
+                      {v.version} {v.isPatchline ? `(Channel${v.resolvedVersion ? ` - v${v.resolvedVersion}` : ''})` : '(Frozen Version)'} {!v.isCached ? '(Not Cached)' : ''}
+                    </option>
+                  ))}
                 </select>
+              </div>
+
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: '16px', marginTop: '16px', marginBottom: '16px' }}>
+                <h4 style={{ fontSize: '14px', color: 'var(--primary)', fontWeight: 'bold', marginBottom: '12px' }}>
+                  Hytale settings.json Configuration
+                </h4>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="settings-servername">Hytale Server Name</label>
+                    <input
+                      type="text"
+                      id="settings-servername"
+                      className="form-input"
+                      value={settingsServerName}
+                      onChange={(e) => setSettingsServerName(e.target.value)}
+                      disabled={creating}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="settings-motd">MOTD</label>
+                    <input
+                      type="text"
+                      id="settings-motd"
+                      className="form-input"
+                      placeholder="e.g. Welcome to Hytale!"
+                      value={motd}
+                      onChange={(e) => setMotd(e.target.value)}
+                      disabled={creating}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="settings-password">Password (Optional)</label>
+                    <input
+                      type="text"
+                      id="settings-password"
+                      className="form-input"
+                      placeholder="Leave empty for public"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={creating}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="settings-maxplayers">Max Players</label>
+                    <input
+                      type="number"
+                      id="settings-maxplayers"
+                      className="form-input"
+                      value={maxPlayers}
+                      onChange={(e) => setMaxPlayers(parseInt(e.target.value, 10) || 100)}
+                      disabled={creating}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="settings-maxviewradius">Max View Radius</label>
+                    <input
+                      type="number"
+                      id="settings-maxviewradius"
+                      className="form-input"
+                      value={maxViewRadius}
+                      onChange={(e) => setMaxViewRadius(parseInt(e.target.value, 10) || 32)}
+                      disabled={creating}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="settings-world">Default World Name</label>
+                    <input
+                      type="text"
+                      id="settings-world"
+                      className="form-input"
+                      value={world}
+                      onChange={(e) => setWorld(e.target.value)}
+                      disabled={creating}
+                    />
+                  </div>
+
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="settings-gamemode">Default Game Mode</label>
+                    <select
+                      id="settings-gamemode"
+                      value={gameMode}
+                      onChange={(e) => setGameMode(e.target.value)}
+                      disabled={creating}
+                      style={{
+                        backgroundColor: 'color-mix(in srgb, var(--bg-dark) 60%, transparent)',
+                        color: 'var(--text-main)',
+                        border: '1px solid var(--border)',
+                        padding: '12px',
+                        borderRadius: '8px',
+                        fontSize: '14px',
+                        width: '100%',
+                        cursor: creating ? 'not-allowed' : 'default'
+                      }}
+                    >
+                      <option value="Adventure">Adventure</option>
+                      <option value="Survival">Survival</option>
+                      <option value="Creative">Creative</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="settings-localcompression"
+                      checked={localCompressionEnabled}
+                      onChange={(e) => setLocalCompressionEnabled(e.target.checked)}
+                      disabled={creating}
+                      style={{ cursor: 'pointer', accentColor: 'var(--primary)' }}
+                    />
+                    <label htmlFor="settings-localcompression" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                      Enable Local Compression
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <input
+                      type="checkbox"
+                      id="settings-displaytmptags"
+                      checked={displayTmpTagsInStrings}
+                      onChange={(e) => setDisplayTmpTagsInStrings(e.target.checked)}
+                      disabled={creating}
+                      style={{ cursor: 'pointer', accentColor: 'var(--primary)' }}
+                    />
+                    <label htmlFor="settings-displaytmptags" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: 'pointer', userSelect: 'none' }}>
+                      Display Temp Tags in Strings
+                    </label>
+                  </div>
+                </div>
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>

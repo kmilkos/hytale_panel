@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiRequest, getUser, clearToken, API_BASE_URL, getToken } from '../utils/api';
 import { showConfirm } from '../utils/confirm';
@@ -10,10 +10,12 @@ export default function SystemSettings() {
   // Settings Form State
   const [cfKey, setCfKey] = useState('');
   const [nxKey, setNxKey] = useState('');
-  const [defaultVersion, setDefaultVersion] = useState('latest');
+  const [defaultVersion, setDefaultVersion] = useState('release');
   const [saveSuccess, setSaveSuccess] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [hytaleVersions, setHytaleVersions] = useState([]);
+  const [selectedVersion, setSelectedVersion] = useState('release');
 
   // Audit Logs State
   const [logs, setLogs] = useState([]);
@@ -39,6 +41,7 @@ export default function SystemSettings() {
   const [assignedServerIds, setAssignedServerIds] = useState([]);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [updateInfo, setUpdateInfo] = useState(null);
+  const installerConsoleRef = useRef(null);
 
   const navigate = useNavigate();
 
@@ -53,6 +56,7 @@ export default function SystemSettings() {
       fetchSettings();
       fetchAuditLogs(1);
       fetchInstallerStatus();
+      fetchHytaleVersions();
       
       if (curUser.role === 'admin') {
         fetchUsers();
@@ -68,12 +72,33 @@ export default function SystemSettings() {
   useEffect(() => {
     let pollInterval;
     if (downloadingInstaller) {
-      pollInterval = setInterval(fetchInstallerStatus, 2000);
+      pollInterval = setInterval(() => fetchInstallerStatus(selectedVersion), 2000);
     }
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [downloadingInstaller]);
+  }, [downloadingInstaller, selectedVersion]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowUserModal(false);
+        setEditingUser(null);
+      }
+    };
+    if (showUserModal) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showUserModal]);
+
+  useEffect(() => {
+    if (installerConsoleRef.current) {
+      installerConsoleRef.current.scrollTop = installerConsoleRef.current.scrollHeight;
+    }
+  }, [installerStatus.downloadState.logs]);
 
   const fetchStats = async () => {
     try {
@@ -89,7 +114,9 @@ export default function SystemSettings() {
       const settings = await apiRequest('/system/settings');
       setCfKey(settings.curseforge_api_key || '');
       setNxKey(settings.nexus_api_key || '');
-      setDefaultVersion(settings.default_server_version || 'latest');
+      let defVer = settings.default_server_version || 'release';
+      if (defVer === 'latest') defVer = 'release';
+      setDefaultVersion(defVer);
     } catch (err) {
       console.error('Failed to fetch system settings', err);
     }
@@ -109,9 +136,9 @@ export default function SystemSettings() {
     }
   };
 
-  const fetchInstallerStatus = async () => {
+  const fetchInstallerStatus = async (version = selectedVersion) => {
     try {
-      const data = await apiRequest('/system/installer-status');
+      const data = await apiRequest(`/system/installer-status?version=${version}`);
       setInstallerStatus(data);
       setInstallerUrl(data.configuredUrl || '');
       const activeStates = ['downloading', 'downloading_game', 'awaiting_auth', 'extracting'];
@@ -119,9 +146,21 @@ export default function SystemSettings() {
         setDownloadingInstaller(true);
       } else {
         setDownloadingInstaller(false);
+        if (data.downloadState.status === 'completed') {
+          fetchHytaleVersions();
+        }
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const fetchHytaleVersions = async () => {
+    try {
+      const data = await apiRequest('/system/versions');
+      setHytaleVersions(data);
+    } catch (err) {
+      console.error('Failed to fetch Hytale versions', err);
     }
   };
 
@@ -217,12 +256,27 @@ export default function SystemSettings() {
     try {
       await apiRequest('/system/download-installer', {
         method: 'POST',
-        body: { downloadUrl: finalUrl }
+        body: { downloadUrl: finalUrl, version: selectedVersion }
       });
-      fetchInstallerStatus();
+      fetchInstallerStatus(selectedVersion);
     } catch (err) {
       setInstallerError(err.message || 'Failed to start installer download.');
       setDownloadingInstaller(false);
+    }
+  };
+
+  const handleAbortInstaller = async () => {
+    if (!window.confirm('Are you sure you want to abort the current installer task?')) {
+      return;
+    }
+    setInstallerError('');
+    try {
+      await apiRequest('/system/abort-installer', {
+        method: 'POST'
+      });
+      fetchInstallerStatus();
+    } catch (err) {
+      setInstallerError(err.message || 'Failed to abort installer download.');
     }
   };
 
@@ -237,8 +291,7 @@ export default function SystemSettings() {
         method: 'PUT',
         body: {
           curseforge_api_key: cfKey,
-          nexus_api_key: nxKey,
-          default_server_version: defaultVersion
+          nexus_api_key: nxKey
         }
       });
       setSaveSuccess('API keys and system settings saved successfully.');
@@ -247,6 +300,21 @@ export default function SystemSettings() {
       setSaveError(err.message || 'Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDefaultVersionChange = async (newVal) => {
+    setDefaultVersion(newVal);
+    try {
+      await apiRequest('/system/settings', {
+        method: 'PUT',
+        body: {
+          default_server_version: newVal
+        }
+      });
+    } catch (err) {
+      console.error('Failed to update default server version:', err);
+      alert('Failed to update default server version: ' + err.message);
     }
   };
 
@@ -463,30 +531,6 @@ export default function SystemSettings() {
                 <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Used for querying remote listings discovery (manual install only).</span>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Default Hytale Server Version</label>
-                <select
-                  value={defaultVersion}
-                  onChange={(e) => setDefaultVersion(e.target.value)}
-                  disabled={saving}
-                  style={{
-                    backgroundColor: 'rgba(9, 10, 15, 0.6)',
-                    color: 'var(--text-main)',
-                    border: '1px solid var(--border)',
-                    padding: '12px',
-                    borderRadius: '8px',
-                    fontSize: '14px',
-                    width: '100%',
-                    cursor: saving ? 'not-allowed' : 'default'
-                  }}
-                >
-                  <option value="latest">latest</option>
-                  <option value="0.2.0">0.2.0</option>
-                  <option value="0.1.0">0.1.0</option>
-                </select>
-                <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Determines which Hytale version to download and deploy for new servers when no specific version is selected.</span>
-              </div>
-
               <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '12px' }} disabled={saving}>
                 {saving ? 'Saving...' : 'Save Config'}
               </button>
@@ -507,17 +551,113 @@ export default function SystemSettings() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '24px', alignItems: 'start' }}>
               <div>
+                {/* Default Server Version selection */}
+                <div className="form-group" style={{ marginBottom: '20px' }}>
+                  <label className="form-label" style={{ color: 'var(--primary)', fontWeight: 'bold' }}>Default Hytale Server Version</label>
+                  <select
+                    value={defaultVersion}
+                    onChange={(e) => handleDefaultVersionChange(e.target.value)}
+                    disabled={saving}
+                    style={{
+                      backgroundColor: 'rgba(9, 10, 15, 0.6)',
+                      color: 'var(--text-main)',
+                      border: '1px solid var(--border)',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      fontSize: '14px',
+                      width: '100%',
+                      cursor: saving ? 'not-allowed' : 'default'
+                    }}
+                  >
+                    {hytaleVersions.map((v) => (
+                      <option key={v.version} value={v.version}>
+                        {v.version} {v.isPatchline ? `(Channel${v.resolvedVersion ? ` - v${v.resolvedVersion}` : ''})` : '(Frozen Version)'} {!v.isCached ? '(Not Cached)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>
+                    Determines which Hytale version to download and deploy for new servers when no specific version is selected.
+                  </span>
+                </div>
+
+                {/* Available Versions Table */}
+                <div style={{ marginBottom: '24px' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
+                    Available Versions & Cache Status
+                  </label>
+                  <div style={{ overflowX: 'auto', border: '1px solid var(--border)', borderRadius: '8px', backgroundColor: 'rgba(9, 10, 15, 0.4)' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', backgroundColor: 'rgba(255,255,255,0.02)' }}>
+                          <th style={{ padding: '10px 16px' }}>Version</th>
+                          <th style={{ padding: '10px 16px' }}>Cache Status</th>
+                          <th style={{ padding: '10px 16px', textAlign: 'right' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {hytaleVersions.map(v => (
+                          <tr key={v.version} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+                            <td style={{ padding: '10px 16px', fontWeight: '600', color: 'var(--text-main)' }}>
+                              {v.version}
+                              {v.isPatchline ? (
+                                <span className="badge badge-warning" style={{ fontSize: '9px', padding: '1px 5px', marginLeft: '6px' }}>
+                                  Channel {v.resolvedVersion ? `(v${v.resolvedVersion})` : ''}
+                                </span>
+                              ) : (
+                                <span className="badge badge-success" style={{ fontSize: '9px', padding: '1px 5px', marginLeft: '6px', backgroundColor: '#10b981' }}>
+                                  Frozen Version
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '10px 16px' }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <span className={`status-dot ${v.isCached ? 'active' : 'stopped'}`} style={{ width: '8px', height: '8px' }}></span>
+                                <span style={{ color: v.isCached ? 'var(--success)' : 'var(--text-dark)', fontWeight: '500' }}>
+                                  {v.isCached ? 'Cached & Ready' : 'Missing'}
+                                </span>
+                              </div>
+                            </td>
+                            <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                              {v.isPatchline ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedVersion(v.version);
+                                    fetchInstallerStatus(v.version);
+                                  }}
+                                  className={`btn ${selectedVersion === v.version ? 'btn-primary' : 'btn-secondary'}`}
+                                  style={{ padding: '3px 10px', fontSize: '11px' }}
+                                >
+                                  Select to Cache
+                                </button>
+                              ) : (
+                                <span style={{ color: 'var(--text-dark)', fontSize: '11px', fontStyle: 'italic' }}>Static (Read-only)</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
                 <div style={{ marginBottom: '16px' }}>
-                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Cache Status</label>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Selected Version Cache Status</label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px' }}>
                     <span className={`status-dot ${installerStatus.isCached ? 'active' : 'stopped'}`}></span>
                     <strong style={{ fontSize: '15px' }}>
-                      {installerStatus.isCached ? 'Cached & Ready (shared/)' : 'Missing / Not Cached'}
+                      {selectedVersion}: {installerStatus.isCached ? 'Cached & Ready' : 'Missing / Not Cached'}
                     </strong>
                   </div>
                 </div>
 
-                <form onSubmit={handleDownloadInstaller}>
+                <form onSubmit={handleDownloadInstaller} style={{ borderTop: '1px solid var(--border)', paddingTop: '16px' }}>
+                  <div style={{ marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Target Version to Download:</span>
+                    <span className="badge badge-warning" style={{ fontSize: '12px', fontWeight: 'bold', padding: '3px 8px' }}>
+                      {selectedVersion}
+                    </span>
+                  </div>
                   <div className="form-group">
                     <label className="form-label">Installer ZIP Download URL</label>
                     <input
@@ -539,7 +679,7 @@ export default function SystemSettings() {
                     disabled={downloadingInstaller}
                     style={{ width: '100%', marginTop: '8px' }}
                   >
-                    {downloadingInstaller ? 'Downloading...' : 'Download & Cache Installer'}
+                    {downloadingInstaller ? 'Downloading...' : `Download & Cache Installer (${selectedVersion})`}
                   </button>
                 </form>
               </div>
@@ -691,6 +831,76 @@ export default function SystemSettings() {
                     <span>Extracting cache files... Please keep this page open.</span>
                   </div>
                 )}
+
+                {downloadingInstaller && (
+                  <button
+                    type="button"
+                    onClick={handleAbortInstaller}
+                    className="btn"
+                    style={{
+                      marginTop: '12px',
+                      width: '100%',
+                      backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                      border: '1px solid rgba(244, 63, 94, 0.3)',
+                      color: 'var(--error)',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s ease',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.backgroundColor = 'var(--error)';
+                      e.target.style.color = '#fff';
+                      e.target.style.boxShadow = '0 0 12px rgba(244, 63, 94, 0.4)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.backgroundColor = 'rgba(244, 63, 94, 0.1)';
+                      e.target.style.color = 'var(--error)';
+                      e.target.style.boxShadow = 'none';
+                    }}
+                  >
+                    Abort Installer Task
+                  </button>
+                )}
+
+                <div style={{ marginTop: '16px' }}>
+                  <label style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', display: 'block', marginBottom: '6px' }}>
+                    Installer Terminal Logs
+                  </label>
+                  <div 
+                    ref={installerConsoleRef}
+                    style={{
+                      backgroundColor: '#050608',
+                      border: '1px solid var(--border)',
+                      borderRadius: '8px',
+                      padding: '12px',
+                      fontFamily: 'var(--font-mono)',
+                      fontSize: '11px',
+                      color: '#4ade80',
+                      maxHeight: '180px',
+                      overflowY: 'auto',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '4px',
+                      lineHeight: '1.4',
+                      whiteSpace: 'pre-wrap',
+                      wordBreak: 'break-all',
+                      textAlign: 'left',
+                      boxShadow: 'inset 0 0 10px rgba(0, 0, 0, 0.8)'
+                    }}
+                  >
+                    {!installerStatus.downloadState.logs || installerStatus.downloadState.logs.length === 0 ? (
+                      <div style={{ color: 'var(--text-dark)', fontStyle: 'italic' }}>
+                        [System] Console ready. Awaiting cache installer task...
+                      </div>
+                    ) : (
+                      installerStatus.downloadState.logs.map((logLine, idx) => (
+                        <div key={idx} style={{ color: logLine.toLowerCase().includes('error') || logLine.toLowerCase().includes('failed') ? 'var(--error)' : 'inherit' }}>
+                          {logLine}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -968,17 +1178,18 @@ export default function SystemSettings() {
 
       {/* Create or Edit User Modal */}
       {showUserModal && (
-        <div className="modal-overlay animate-fade-in">
+        <div className="modal-overlay animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="user-modal-title">
           <div className="modal-content" style={{ maxWidth: '500px' }}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
+            <h3 id="user-modal-title" style={{ fontFamily: 'var(--font-heading)', fontSize: '20px', fontWeight: 'bold', marginBottom: '16px' }}>
               {editingUser ? `Edit User: ${editingUser.username}` : 'Create New User Account'}
             </h3>
             
             <form onSubmit={handleCreateOrUpdateUser}>
               <div className="form-group">
-                <label className="form-label">Username</label>
+                <label className="form-label" htmlFor="user-create-username">Username</label>
                 <input
                   type="text"
+                  id="user-create-username"
                   className="form-input"
                   value={usernameInput}
                   onChange={(e) => setUsernameInput(e.target.value)}
@@ -988,9 +1199,10 @@ export default function SystemSettings() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Password</label>
+                <label className="form-label" htmlFor="user-create-password">Password</label>
                 <input
                   type="password"
+                  id="user-create-password"
                   className="form-input"
                   value={passwordInput}
                   onChange={(e) => setPasswordInput(e.target.value)}
@@ -1000,8 +1212,9 @@ export default function SystemSettings() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">User Role</label>
+                <label className="form-label" htmlFor="user-create-role">User Role</label>
                 <select
+                  id="user-create-role"
                   value={roleInput}
                   onChange={(e) => setRoleInput(e.target.value)}
                   style={{

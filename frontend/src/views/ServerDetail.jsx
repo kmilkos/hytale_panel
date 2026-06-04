@@ -1,8 +1,18 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest, API_BASE_URL, WS_BASE_URL, getToken, getUser } from '../utils/api';
 import { showConfirm, showModDeleteConfirm } from '../utils/confirm';
 import { showError } from '../utils/errorModal';
+
+const cleanAnsiCodes = (line) => {
+  if (!line) return '';
+  const str = typeof line === 'string' ? line : String(line);
+  // Strip real ANSI escape codes
+  let clean = str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+  // Strip literal raw ANSI remnants like [m, [32m, [1m, [0m
+  clean = clean.replace(/\[[0-9;]*m/g, '');
+  return clean;
+};
 
 export default function ServerDetail() {
   const { id } = useParams();
@@ -16,6 +26,9 @@ export default function ServerDetail() {
   const [currentUser, setCurrentUser] = useState(null);
   const [metrics, setMetrics] = useState([]);
   const [serverConfig, setServerConfig] = useState(null);
+  const [configFiles, setConfigFiles] = useState(['settings.json', 'server.json']);
+  const [selectedConfigFile, setSelectedConfigFile] = useState('settings.json');
+  const [hytaleVersions, setHytaleVersions] = useState([]);
   const [schedules, setSchedules] = useState([]);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [editingSchedule, setEditingSchedule] = useState(null);
@@ -443,6 +456,8 @@ export default function ServerDetail() {
   const [fetchingConfigs, setFetchingConfigs] = useState({});
   const [modUpdates, setModUpdates] = useState({});
   const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [fetchingSyncStatus, setFetchingSyncStatus] = useState(false);
   const [updatingMods, setUpdatingMods] = useState({});
   const [selectedInstalledMod, setSelectedInstalledMod] = useState(null);
   const [selectedInstalledModDetails, setSelectedInstalledModDetails] = useState(null);
@@ -498,6 +513,41 @@ export default function ServerDetail() {
   const [diagSearch, setDiagSearch] = useState('');
   const [logsFilter, setLogsFilter] = useState('all'); // 'all' | 'stdout' | 'stderr' | 'sent'
 
+  const filteredLogs = useMemo(() => {
+    return logs.filter(line => {
+      // Stream filtering
+      if (logsFilter !== 'all') {
+        if (logsFilter === 'sent' && !line.startsWith('>')) return false;
+        if (logsFilter === 'stdout' && (line.startsWith('>') || line.toLowerCase().includes('err') || line.toLowerCase().includes('exception'))) return false;
+        if (logsFilter === 'stderr' && !line.startsWith('>') && (line.toLowerCase().includes('err') || line.toLowerCase().includes('exception'))) return true;
+      }
+
+      // Search filtering
+      if (diagSearch && !cleanAnsiCodes(line).toLowerCase().includes(diagSearch.toLowerCase())) {
+        return false;
+      }
+      return true;
+    });
+  }, [logs, logsFilter, diagSearch]);
+
+  const filteredDiagnostics = useMemo(() => {
+    return diagnostics.filter(d => diagFilter === 'all' || d.severity === diagFilter);
+  }, [diagnostics, diagFilter]);
+
+  const diagnosticsCounts = useMemo(() => {
+    let errors = 0;
+    let warnings = 0;
+    for (const d of diagnostics) {
+      if (d.severity === 'error') errors++;
+      else if (d.severity === 'warning') warnings++;
+    }
+    return { errors, warnings };
+  }, [diagnostics]);
+
+  const filteredPlayerStats = useMemo(() => {
+    return playerStats.filter(p => !statsSearchQuery || p.username.toLowerCase().includes(statsSearchQuery.toLowerCase()));
+  }, [playerStats, statsSearchQuery]);
+
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -507,13 +557,15 @@ export default function ServerDetail() {
     fetchInstalledMods();
     fetchActiveDownloads();
     handleCheckUpdates();
+    fetchSyncStatus();
     
     fetchMetrics();
     fetchSchedules();
-
+    fetchHytaleVersions();
+ 
     const dlInterval = setInterval(fetchActiveDownloads, 2000);
     const metricsInterval = setInterval(fetchMetrics, 15000);
-
+ 
     return () => {
       isMountedRef.current = false;
       clearInterval(dlInterval);
@@ -521,6 +573,25 @@ export default function ServerDetail() {
       if (wsRef.current) wsRef.current.close();
     };
   }, [id]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        if (editingFile) {
+          setEditingFile(null);
+        } else if (showScheduleModal) {
+          setShowScheduleModal(false);
+          setEditingSchedule(null);
+        }
+      }
+    };
+    if (editingFile || showScheduleModal) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [editingFile, showScheduleModal]);
 
   useEffect(() => {
     if (!selectedInstalledMod) {
@@ -590,6 +661,12 @@ export default function ServerDetail() {
       fetchFiles(currentRelPath);
     }
 
+    if (activeTab === 'mods') {
+      fetchInstalledMods();
+      fetchActiveDownloads();
+      fetchSyncStatus();
+    }
+
     if (activeTab === 'players') {
       fetchOnlinePlayers();
       fetchPlayerHistory();
@@ -601,7 +678,7 @@ export default function ServerDetail() {
     }
 
     if (activeTab === 'config') {
-      fetchServerConfig();
+      fetchConfigFilesList();
     }
 
     if (activeTab === 'logger') {
@@ -778,15 +855,6 @@ export default function ServerDetail() {
     isAutoScrollRef.current = isAtBottom;
   };
 
-  const cleanAnsiCodes = (line) => {
-    if (!line) return '';
-    const str = typeof line === 'string' ? line : String(line);
-    // Strip real ANSI escape codes
-    let clean = str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
-    // Strip literal raw ANSI remnants like [m, [32m, [1m, [0m
-    clean = clean.replace(/\[[0-9;]*m/g, '');
-    return clean;
-  };
 
   const renderLineWithLinks = (line) => {
     if (!line) return '';
@@ -1251,9 +1319,26 @@ export default function ServerDetail() {
     fetchMetrics(newRange);
   };
 
-  const fetchServerConfig = async () => {
+  const fetchConfigFilesList = async () => {
     try {
-      const data = await apiRequest(`/servers/${id}/config-files/server.json`);
+      const data = await apiRequest(`/servers/${id}/config-files`);
+      if (Array.isArray(data) && data.length > 0) {
+        setConfigFiles(data);
+        if (!data.includes(selectedConfigFile)) {
+          setSelectedConfigFile(data[0]);
+          fetchServerConfig(data[0]);
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch config files list', err);
+    }
+    fetchServerConfig(selectedConfigFile);
+  };
+
+  const fetchServerConfig = async (filename = selectedConfigFile) => {
+    try {
+      const data = await apiRequest(`/servers/${id}/config-files/${filename}`);
       setServerConfig(data);
     } catch (err) {
       console.error(err);
@@ -1263,13 +1348,37 @@ export default function ServerDetail() {
   const handleSaveServerConfig = async (e) => {
     e.preventDefault();
     try {
-      await apiRequest(`/servers/${id}/config-files/server.json`, {
+      let bodyData = serverConfig;
+      if (typeof serverConfig === 'string') {
+        try {
+          bodyData = JSON.parse(serverConfig);
+        } catch (_) {
+          alert('Invalid JSON content. Please correct formatting before saving.');
+          return;
+        }
+      }
+      await apiRequest(`/servers/${id}/config-files/${selectedConfigFile}`, {
         method: 'PUT',
-        body: serverConfig
+        body: bodyData
       });
-      alert('Hytale server.json config saved successfully.');
+      alert(`Hytale ${selectedConfigFile} config saved successfully.`);
+      fetchServerConfig(selectedConfigFile);
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleConfigFileChange = (filename) => {
+    setSelectedConfigFile(filename);
+    fetchServerConfig(filename);
+  };
+
+  const fetchHytaleVersions = async () => {
+    try {
+      const data = await apiRequest('/system/versions');
+      setHytaleVersions(data || []);
+    } catch (err) {
+      console.error('Failed to fetch Hytale versions', err);
     }
   };
 
@@ -1590,10 +1699,52 @@ export default function ServerDetail() {
         updatesMap[upd.fileName] = upd;
       }
       setModUpdates(updatesMap);
+      fetchSyncStatus();
     } catch (err) {
       console.error('Failed to check for mod updates', err);
     } finally {
       setCheckingUpdates(false);
+    }
+  };
+
+  const fetchSyncStatus = async () => {
+    setFetchingSyncStatus(true);
+    try {
+      const data = await apiRequest(`/mods/server/${id}/sync-status`);
+      setSyncStatus(data);
+    } catch (err) {
+      console.error('Failed to fetch sync status:', err);
+    } finally {
+      setFetchingSyncStatus(false);
+    }
+  };
+
+  const handleCoordinatedUpgrade = async () => {
+    if (server?.isRunning) {
+      alert('The server must be stopped before performing an upgrade.');
+      return;
+    }
+    const confirmed = await showConfirm(
+      'Are you sure you want to perform a coordinated upgrade? This will set your server Hytale version to the release channel, download compatible versions of all installed mods, delete their older files, and redeploy server installation files.',
+      { title: 'Perform Coordinated Upgrade', isDanger: true }
+    );
+    if (!confirmed) return;
+
+    try {
+      setInstallingFiles(true);
+      const res = await apiRequest(`/mods/server/${id}/sync-upgrade`, {
+        method: 'POST'
+      });
+      alert(res.message || 'Upgrade completed successfully!');
+      
+      // Refresh details and mods
+      await fetchServerDetails();
+      await fetchInstalledMods();
+      await fetchSyncStatus();
+    } catch (err) {
+      showError(err.message || 'Coordinated upgrade failed.');
+    } finally {
+      setInstallingFiles(false);
     }
   };
 
@@ -1602,14 +1753,14 @@ export default function ServerDetail() {
     try {
       await apiRequest(`/mods/server/${id}/install`, {
         method: 'POST',
-        body: JSON.stringify({
+        body: {
           source: 'curseforge',
           modId: update.curseforgeModId,
           fileId: update.latestFileId,
           fileName: update.latestFileName,
           sha1: update.latestSha1,
           deleteOldFileName: oldFileName
-        })
+        }
       });
       
       setModUpdates(prev => {
@@ -2099,7 +2250,7 @@ export default function ServerDetail() {
           <>
             {/* 1. CONSOLE TAB */}
             {activeTab === 'console' && (
-          <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: '24px', height: '600px' }}>
+          <div className="detail-console-grid">
             {/* Log display */}
             <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, padding: '16px' }}>
               <div 
@@ -2558,33 +2709,33 @@ export default function ServerDetail() {
 
                   if (ext === 'jar') {
                     icon = '☕';
-                    bgColor = 'rgba(244, 63, 94, 0.1)';
-                    borderColor = 'rgba(244, 63, 94, 0.25)';
+                    bgColor = 'color-mix(in srgb, var(--error) 10%, transparent)';
+                    borderColor = 'color-mix(in srgb, var(--error) 25%, transparent)';
                     textColor = 'var(--error)';
                   } else if (ext === 'json') {
                     icon = '⚙️';
-                    bgColor = 'rgba(245, 158, 11, 0.1)';
-                    borderColor = 'rgba(245, 158, 11, 0.25)';
+                    bgColor = 'color-mix(in srgb, var(--primary) 10%, transparent)';
+                    borderColor = 'color-mix(in srgb, var(--primary) 25%, transparent)';
                     textColor = 'var(--primary)';
                   } else if (ext === 'zip' || ext === 'tar' || ext === 'gz' || ext === 'rar') {
                     icon = '📦';
-                    bgColor = 'rgba(16, 185, 129, 0.1)';
-                    borderColor = 'rgba(16, 185, 129, 0.25)';
+                    bgColor = 'color-mix(in srgb, var(--success) 10%, transparent)';
+                    borderColor = 'color-mix(in srgb, var(--success) 25%, transparent)';
                     textColor = 'var(--success)';
                   } else if (ext === 'yml' || ext === 'yaml' || ext === 'properties' || ext === 'cfg') {
                     icon = '📝';
-                    bgColor = 'rgba(59, 130, 246, 0.1)';
-                    borderColor = 'rgba(59, 130, 246, 0.25)';
+                    bgColor = 'color-mix(in srgb, var(--secondary) 10%, transparent)';
+                    borderColor = 'color-mix(in srgb, var(--secondary) 25%, transparent)';
                     textColor = 'var(--secondary)';
                   } else if (ext === 'txt' || ext === 'log') {
                     icon = '🗒️';
-                    bgColor = 'rgba(156, 163, 175, 0.1)';
-                    borderColor = 'rgba(156, 163, 175, 0.25)';
+                    bgColor = 'color-mix(in srgb, var(--text-muted) 10%, transparent)';
+                    borderColor = 'color-mix(in srgb, var(--text-muted) 25%, transparent)';
                     textColor = 'var(--text-muted)';
                   } else if (ext === 'sh' || ext === 'bat') {
                     icon = '⚡';
-                    bgColor = 'rgba(217, 119, 6, 0.1)';
-                    borderColor = 'rgba(217, 119, 6, 0.25)';
+                    bgColor = 'color-mix(in srgb, var(--warning) 10%, transparent)';
+                    borderColor = 'color-mix(in srgb, var(--warning) 25%, transparent)';
                     textColor = 'var(--warning)';
                   }
 
@@ -2617,6 +2768,15 @@ export default function ServerDetail() {
                     <div 
                       key={file.name} 
                       onClick={() => handleFileClick(file)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          handleFileClick(file);
+                        }
+                      }}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open ${file.isDir ? 'folder' : 'file'} ${file.name}`}
                       style={{ 
                         display: 'grid', 
                         gridTemplateColumns: '3fr 1fr 1fr 1fr', 
@@ -2662,6 +2822,7 @@ export default function ServerDetail() {
                           onClick={() => handleDeletePath(file.name)} 
                           className="btn btn-secondary" 
                           style={{ padding: '2px 8px', fontSize: '11px', borderColor: 'rgba(244, 63, 94, 0.4)', color: 'var(--error)' }}
+                          aria-label={`Delete ${file.name}`}
                           disabled={isViewer}
                         >
                           Delete
@@ -2728,7 +2889,64 @@ export default function ServerDetail() {
 
             {/* Installed Server Mods Grid Container */}
             {modsSubTab === 'installed' && (
-              <div style={{ display: 'grid', gridTemplateColumns: selectedInstalledMod ? '1.2fr 1fr' : '1fr', gap: '24px', transition: 'all 0.3s ease' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                
+                {/* Sync Status Banner */}
+                {syncStatus && syncStatus.currentVersion !== syncStatus.targetVersion && (
+                  <div style={{
+                    backgroundColor: syncStatus.syncAvailable ? 'rgba(16, 185, 129, 0.08)' : 'rgba(245, 158, 11, 0.08)',
+                    border: `1px solid ${syncStatus.syncAvailable ? 'var(--success)' : 'var(--warning)'}`,
+                    borderRadius: '10px',
+                    padding: '20px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '12px',
+                    position: 'relative'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '20px' }}>{syncStatus.syncAvailable ? '🚀' : 'ℹ️'}</span>
+                      <strong style={{ fontSize: '15px', color: syncStatus.syncAvailable ? 'var(--success)' : 'var(--warning)' }}>
+                        Hytale Server Upgrade Available
+                      </strong>
+                      <span className="badge badge-warning" style={{ fontSize: '9px', padding: '2px 6px' }}>v{syncStatus.targetVersion}</span>
+                    </div>
+                    <p style={{ fontSize: '13px', color: 'var(--text-main)', margin: 0, lineHeight: '1.5' }}>
+                      Your server is currently running Hytale <strong>v{syncStatus.currentVersion}</strong>. A newer server version (v{syncStatus.targetVersion}) is cached and available.
+                      {syncStatus.syncAvailable ? (
+                        <span> All of your installed mods have compatible updates available for Hytale v{syncStatus.targetVersion}! You can perform a coordinated upgrade of the server and all mods concurrently.</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}> Coordinated upgrade is currently unavailable: {syncStatus.reason}</span>
+                      )}
+                    </p>
+                    {syncStatus.syncAvailable && (
+                      <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
+                        <button
+                          onClick={handleCoordinatedUpgrade}
+                          className="btn btn-primary"
+                          style={{
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            padding: '8px 16px',
+                            backgroundColor: 'var(--success)',
+                            borderColor: 'var(--success)',
+                            color: '#fff',
+                            boxShadow: '0 0 10px rgba(16, 185, 129, 0.3)'
+                          }}
+                          disabled={isViewer || server?.isRunning}
+                        >
+                          Perform Coordinated Upgrade (Server & Mods)
+                        </button>
+                        {server?.isRunning && (
+                          <span style={{ fontSize: '11px', color: 'var(--error)', display: 'flex', alignItems: 'center' }}>
+                            ⚠ Stop the server before upgrading.
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div style={{ display: 'grid', gridTemplateColumns: selectedInstalledMod ? '1.2fr 1fr' : '1fr', gap: '24px', transition: 'all 0.3s ease' }}>
               
               {/* Left Side: Installed List */}
               <div className="glass-panel animate-fade-in" style={{ height: 'fit-content' }}>
@@ -2953,9 +3171,9 @@ export default function ServerDetail() {
                                     color: 'var(--success)',
                                     fontWeight: '600'
                                   }}
-                                  title={`New version: ${modUpdates[mod.fileName].latestVersion}`}
+                                  title={`New version: ${modUpdates[mod.fileName].latestVersion} (Compatible with Hytale v${modUpdates[mod.fileName].gameVersion})`}
                                 >
-                                  ✨ Update
+                                  ✨ Update (v{modUpdates[mod.fileName].gameVersion})
                                 </span>
                               )}
                               {mod.associatedFolders && mod.associatedFolders.length > 0 && (
@@ -3209,14 +3427,19 @@ export default function ServerDetail() {
                         </button>
 
                         {modUpdates[selectedInstalledMod.fileName] && (
-                          <button
-                            onClick={() => handleUpdateMod(selectedInstalledMod.fileName, modUpdates[selectedInstalledMod.fileName])}
-                            className="btn btn-primary"
-                            style={{ flex: 1, fontSize: '12px', padding: '8px 12px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', color: 'var(--success)' }}
-                            disabled={isViewer || !!updatingMods[selectedInstalledMod.fileName]}
-                          >
-                            {updatingMods[selectedInstalledMod.fileName] ? 'Updating...' : '⚡ Update'}
-                          </button>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                            <div style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '600', textAlign: 'center' }}>
+                              Compatible with Hytale v{modUpdates[selectedInstalledMod.fileName].gameVersion}
+                            </div>
+                            <button
+                              onClick={() => handleUpdateMod(selectedInstalledMod.fileName, modUpdates[selectedInstalledMod.fileName])}
+                              className="btn btn-primary"
+                              style={{ width: '100%', fontSize: '12px', padding: '8px 12px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', color: 'var(--success)' }}
+                              disabled={isViewer || !!updatingMods[selectedInstalledMod.fileName]}
+                            >
+                              {updatingMods[selectedInstalledMod.fileName] ? 'Updating...' : '⚡ Update'}
+                            </button>
+                          </div>
                         )}
 
                         <button 
@@ -3236,7 +3459,8 @@ export default function ServerDetail() {
               )}
 
             </div>
-          )}
+          </div>
+        )}
 
           {/* Install New Mods Browser */}
           {modsSubTab === 'marketplace' && (
@@ -3655,18 +3879,18 @@ export default function ServerDetail() {
                         </div>
 
                         {/* Direct Control Buttons */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
                           <button 
                             className="btn btn-secondary" 
-                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            style={{ padding: '6px 4px', fontSize: '10.5px', justifyContent: 'center', gap: '4px' }}
                             onClick={() => handlePlayerCommand(`op add ${player}`)}
                             disabled={isViewer}
                           >
-                            👑 Grant OP
+                            👑 OP
                           </button>
                           <button 
                             className="btn btn-secondary" 
-                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            style={{ padding: '6px 4px', fontSize: '10.5px', justifyContent: 'center', gap: '4px' }}
                             onClick={() => handlePlayerCommand(`op remove ${player}`)}
                             disabled={isViewer}
                           >
@@ -3674,15 +3898,15 @@ export default function ServerDetail() {
                           </button>
                           <button 
                             className="btn btn-secondary" 
-                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            style={{ padding: '6px 4px', fontSize: '10.5px', justifyContent: 'center', gap: '4px' }}
                             onClick={() => handlePlayerCommand(`heal ${player}`)}
                             disabled={isViewer}
                           >
-                            ❤️ Heal Player
+                            ❤️ Heal
                           </button>
                           <button 
                             className="btn btn-danger" 
-                            style={{ padding: '8px 12px', fontSize: '12px', justifyContent: 'center', gap: '6px' }}
+                            style={{ padding: '6px 4px', fontSize: '10.5px', justifyContent: 'center', gap: '4px' }}
                             onClick={async () => {
                               if (await showConfirm(`Kick player ${player}?`, { title: 'Kick Player', confirmText: 'Kick', isDanger: true })) {
                                 handlePlayerCommand(`kick ${player}`);
@@ -3690,7 +3914,7 @@ export default function ServerDetail() {
                             }}
                             disabled={isViewer}
                           >
-                            🚪 Kick Player
+                            🚪 Kick
                           </button>
                         </div>
 
@@ -4078,9 +4302,7 @@ export default function ServerDetail() {
                     <div style={{ textAlign: 'right' }}>Permission Actions</div>
                   </div>
 
-                  {playerStats
-                    .filter(p => !statsSearchQuery || p.username.toLowerCase().includes(statsSearchQuery.toLowerCase()))
-                    .map((p) => {
+                  {filteredPlayerStats.map((p) => {
                       const isWhitelisted = whitelistArray.includes(p.username);
                       const isBanned = bansArray.includes(p.username);
 
@@ -4448,9 +4670,11 @@ export default function ServerDetail() {
                     }}
                   >
                     <option value="Use Global Default">Use Global Default</option>
-                    <option value="latest">latest</option>
-                    <option value="0.2.0">0.2.0</option>
-                    <option value="0.1.0">0.1.0</option>
+                    {hytaleVersions.map(v => (
+                      <option key={v.version} value={v.version}>
+                        {v.version} {v.isPatchline ? '(Patchline Stream)' : '(Frozen Version)'}
+                      </option>
+                    ))}
                   </select>
                   <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Change the specific Hytale core version or choose to inherit the global default.</span>
                 </div>
@@ -4477,89 +4701,275 @@ export default function ServerDetail() {
 
             {/* Right Column: Visual Configuration Manager Form (Hytale JSON Editor) */}
             <div style={{ flex: 1, borderLeft: '1px solid var(--border)', paddingLeft: '32px' }}>
-              <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '24px' }}>
-                Hytale Configuration (server.json)
-              </h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border)', paddingBottom: '12px', marginBottom: '24px' }}>
+                <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: '600', color: 'var(--primary)', margin: 0 }}>
+                  Hytale Configuration
+                </h3>
+                <select
+                  value={selectedConfigFile}
+                  onChange={(e) => handleConfigFileChange(e.target.value)}
+                  disabled={isViewer}
+                  style={{
+                    backgroundColor: 'var(--bg-panel-hover)',
+                    color: 'var(--text-main)',
+                    border: '1px solid var(--border)',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    fontSize: '13px',
+                    cursor: isViewer ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  {configFiles.map(f => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </div>
 
               {serverConfig ? (
                 <form onSubmit={handleSaveServerConfig}>
-                  <div className="form-group">
-                    <label className="form-label">Server Name</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={serverConfig.serverName || ''}
-                      onChange={(e) => setServerConfig({ ...serverConfig, serverName: e.target.value })}
-                      disabled={isViewer}
-                      required
-                    />
-                  </div>
+                  {selectedConfigFile === 'settings.json' && (
+                    <>
+                      <div className="form-group">
+                        <label className="form-label">Server Name</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={serverConfig.ServerName || ''}
+                          onChange={(e) => setServerConfig({ ...serverConfig, ServerName: e.target.value })}
+                          disabled={isViewer}
+                          required
+                        />
+                      </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Description</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={serverConfig.description || ''}
-                      onChange={(e) => setServerConfig({ ...serverConfig, description: e.target.value })}
-                      disabled={isViewer}
-                    />
-                  </div>
+                      <div className="form-group">
+                        <label className="form-label">MOTD</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={serverConfig.MOTD || ''}
+                          onChange={(e) => setServerConfig({ ...serverConfig, MOTD: e.target.value })}
+                          disabled={isViewer}
+                        />
+                      </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Max Players</label>
-                    <input
-                      type="number"
-                      className="form-input"
-                      value={serverConfig.maxPlayers || 20}
-                      onChange={(e) => setServerConfig({ ...serverConfig, maxPlayers: parseInt(e.target.value, 10) || 0 })}
-                      disabled={isViewer}
-                      required
-                    />
-                  </div>
+                      <div className="form-group">
+                        <label className="form-label">Password</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          placeholder="Public"
+                          value={serverConfig.Password || ''}
+                          onChange={(e) => setServerConfig({ ...serverConfig, Password: e.target.value })}
+                          disabled={isViewer}
+                        />
+                      </div>
 
-                  <div className="form-group">
-                    <label className="form-label">Bind Address</label>
-                    <input
-                      type="text"
-                      className="form-input"
-                      value={serverConfig.bindAddress || '0.0.0.0'}
-                      onChange={(e) => setServerConfig({ ...serverConfig, bindAddress: e.target.value })}
-                      disabled={isViewer}
-                      required
-                    />
-                  </div>
+                      <div className="form-group">
+                        <label className="form-label">Max Players</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={serverConfig.MaxPlayers || 100}
+                          onChange={(e) => setServerConfig({ ...serverConfig, MaxPlayers: parseInt(e.target.value, 10) || 0 })}
+                          disabled={isViewer}
+                          required
+                        />
+                      </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                    <input
-                      type="checkbox"
-                      id="whitelistEnabled"
-                      checked={serverConfig.whitelistEnabled || false}
-                      onChange={(e) => setServerConfig({ ...serverConfig, whitelistEnabled: e.target.checked })}
-                      disabled={isViewer}
-                      style={{ cursor: isViewer ? 'not-allowed' : 'pointer', accentColor: 'var(--primary)' }}
-                    />
-                    <label htmlFor="whitelistEnabled" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: isViewer ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
-                      Enable Whitelist Control
-                    </label>
-                  </div>
+                      <div className="form-group">
+                        <label className="form-label">Max View Radius</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={serverConfig.MaxViewRadius || 32}
+                          onChange={(e) => setServerConfig({ ...serverConfig, MaxViewRadius: parseInt(e.target.value, 10) || 0 })}
+                          disabled={isViewer}
+                          required
+                        />
+                      </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
-                    <input
-                      type="checkbox"
-                      id="announceToMasterServer"
-                      checked={serverConfig.announceToMasterServer || false}
-                      onChange={(e) => setServerConfig({ ...serverConfig, announceToMasterServer: e.target.checked })}
-                      disabled={isViewer}
-                      style={{ cursor: isViewer ? 'not-allowed' : 'pointer', accentColor: 'var(--primary)' }}
-                    />
-                    <label htmlFor="announceToMasterServer" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: isViewer ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
-                      Announce to Hytale Master Directory
-                    </label>
-                  </div>
+                      <div className="form-group">
+                        <label className="form-label">Default World</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={serverConfig.Defaults?.World || 'default'}
+                          onChange={(e) => setServerConfig({
+                            ...serverConfig,
+                            Defaults: {
+                              ...(serverConfig.Defaults || {}),
+                              World: e.target.value
+                            }
+                          })}
+                          disabled={isViewer}
+                          required
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Default Game Mode</label>
+                        <select
+                          value={serverConfig.Defaults?.GameMode || 'Adventure'}
+                          onChange={(e) => setServerConfig({
+                            ...serverConfig,
+                            Defaults: {
+                              ...(serverConfig.Defaults || {}),
+                              GameMode: e.target.value
+                            }
+                          })}
+                          disabled={isViewer}
+                          style={{
+                            backgroundColor: 'color-mix(in srgb, var(--bg-dark) 60%, transparent)',
+                            color: 'var(--text-main)',
+                            border: '1px solid var(--border)',
+                            padding: '12px',
+                            borderRadius: '8px',
+                            fontSize: '14px',
+                            width: '100%',
+                            cursor: isViewer ? 'not-allowed' : 'default'
+                          }}
+                        >
+                          <option value="Adventure">Adventure</option>
+                          <option value="Survival">Survival</option>
+                          <option value="Creative">Creative</option>
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', marginTop: '12px' }}>
+                        <input
+                          type="checkbox"
+                          id="localCompressionEnabled"
+                          checked={serverConfig.LocalCompressionEnabled || false}
+                          onChange={(e) => setServerConfig({ ...serverConfig, LocalCompressionEnabled: e.target.checked })}
+                          disabled={isViewer}
+                          style={{ cursor: isViewer ? 'not-allowed' : 'pointer', accentColor: 'var(--primary)' }}
+                        />
+                        <label htmlFor="localCompressionEnabled" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: isViewer ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
+                          Local Compression Enabled
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                        <input
+                          type="checkbox"
+                          id="displayTmpTagsInStrings"
+                          checked={serverConfig.DisplayTmpTagsInStrings || false}
+                          onChange={(e) => setServerConfig({ ...serverConfig, DisplayTmpTagsInStrings: e.target.checked })}
+                          disabled={isViewer}
+                          style={{ cursor: isViewer ? 'not-allowed' : 'pointer', accentColor: 'var(--primary)' }}
+                        />
+                        <label htmlFor="displayTmpTagsInStrings" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: isViewer ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
+                          Display Temp Tags In Strings
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedConfigFile === 'server.json' && (
+                    <>
+                      <div className="form-group">
+                        <label className="form-label">Server Name</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={serverConfig.serverName || ''}
+                          onChange={(e) => setServerConfig({ ...serverConfig, serverName: e.target.value })}
+                          disabled={isViewer}
+                          required
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Description</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={serverConfig.description || ''}
+                          onChange={(e) => setServerConfig({ ...serverConfig, description: e.target.value })}
+                          disabled={isViewer}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Max Players</label>
+                        <input
+                          type="number"
+                          className="form-input"
+                          value={serverConfig.maxPlayers || 20}
+                          onChange={(e) => setServerConfig({ ...serverConfig, maxPlayers: parseInt(e.target.value, 10) || 0 })}
+                          disabled={isViewer}
+                          required
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label className="form-label">Bind Address</label>
+                        <input
+                          type="text"
+                          className="form-input"
+                          value={serverConfig.bindAddress || '0.0.0.0'}
+                          onChange={(e) => setServerConfig({ ...serverConfig, bindAddress: e.target.value })}
+                          disabled={isViewer}
+                          required
+                        />
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
+                        <input
+                          type="checkbox"
+                          id="whitelistEnabled"
+                          checked={serverConfig.whitelistEnabled || false}
+                          onChange={(e) => setServerConfig({ ...serverConfig, whitelistEnabled: e.target.checked })}
+                          disabled={isViewer}
+                          style={{ cursor: isViewer ? 'not-allowed' : 'pointer', accentColor: 'var(--primary)' }}
+                        />
+                        <label htmlFor="whitelistEnabled" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: isViewer ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
+                          Enable Whitelist Control
+                        </label>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '24px' }}>
+                        <input
+                          type="checkbox"
+                          id="announceToMasterServer"
+                          checked={serverConfig.announceToMasterServer || false}
+                          onChange={(e) => setServerConfig({ ...serverConfig, announceToMasterServer: e.target.checked })}
+                          disabled={isViewer}
+                          style={{ cursor: isViewer ? 'not-allowed' : 'pointer', accentColor: 'var(--primary)' }}
+                        />
+                        <label htmlFor="announceToMasterServer" style={{ fontSize: '14px', color: 'var(--text-muted)', cursor: isViewer ? 'not-allowed' : 'pointer', userSelect: 'none' }}>
+                          Announce to Hytale Master Directory
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {selectedConfigFile !== 'settings.json' && selectedConfigFile !== 'server.json' && (
+                    <div className="form-group">
+                      <label className="form-label">JSON Data</label>
+                      <textarea
+                        className="form-input"
+                        style={{ fontFamily: 'var(--font-mono)', minHeight: '300px', fontSize: '12px' }}
+                        value={typeof serverConfig === 'string' ? serverConfig : JSON.stringify(serverConfig, null, 2)}
+                        onChange={(e) => {
+                          try {
+                            const parsed = JSON.parse(e.target.value);
+                            setServerConfig(parsed);
+                          } catch (_) {
+                            setServerConfig(e.target.value);
+                          }
+                        }}
+                        disabled={isViewer}
+                        required
+                      />
+                      <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>
+                        Ensure you write valid JSON format.
+                      </span>
+                    </div>
+                  )}
 
                   <button type="submit" className="btn btn-accent" style={{ width: '100%' }} disabled={isViewer}>
-                    Save server.json Configuration
+                    Save {selectedConfigFile} Configuration
                   </button>
                 </form>
               ) : (
@@ -4627,7 +5037,7 @@ export default function ServerDetail() {
                 </span>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: '28px', fontWeight: 'bold', color: 'var(--error)' }}>
-                    {diagnostics.filter(d => d.severity === 'error').length}
+                    {diagnosticsCounts.errors}
                   </span>
                   <span style={{ fontSize: '24px' }}>⚠️</span>
                 </div>
@@ -4643,7 +5053,7 @@ export default function ServerDetail() {
                 </span>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span style={{ fontFamily: 'var(--font-heading)', fontSize: '28px', fontWeight: 'bold', color: 'var(--primary)' }}>
-                    {diagnostics.filter(d => d.severity === 'warning').length}
+                    {diagnosticsCounts.warnings}
                   </span>
                   <span style={{ fontSize: '24px' }}>⚡</span>
                 </div>
@@ -4658,7 +5068,7 @@ export default function ServerDetail() {
                   Diagnostics Status
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '4px' }}>
-                  {diagnostics.filter(d => d.severity === 'error').length > 0 ? (
+                  {diagnosticsCounts.errors > 0 ? (
                     <>
                       <div className="status-dot warning" style={{ width: '12px', height: '12px' }} />
                       <span className="badge badge-error" style={{ fontSize: '12px', padding: '6px 12px' }}>
@@ -4738,9 +5148,7 @@ export default function ServerDetail() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-                  {diagnostics
-                    .filter(d => diagFilter === 'all' || d.severity === diagFilter)
-                    .map((issue, idx) => (
+                  {filteredDiagnostics.map((issue, idx) => (
                       <div 
                         key={idx}
                         className="glass-panel"
@@ -4930,58 +5338,37 @@ export default function ServerDetail() {
                   <div style={{ color: 'var(--text-dark)', textAlign: 'center', marginTop: '180px' }}>
                     No console logs history retrieved. Run the server to stream outputs.
                   </div>
+                ) : filteredLogs.length === 0 ? (
+                  <div style={{ color: 'var(--text-dark)', textAlign: 'center', marginTop: '180px' }}>
+                    No log lines match the search criteria.
+                  </div>
                 ) : (
-                  (() => {
-                    const filtered = logs.filter(line => {
-                      // Stream filtering
-                      if (logsFilter !== 'all') {
-                        if (logsFilter === 'sent' && !line.startsWith('>')) return false;
-                        if (logsFilter === 'stdout' && (line.startsWith('>') || line.toLowerCase().includes('err') || line.toLowerCase().includes('exception'))) return false;
-                        if (logsFilter === 'stderr' && !line.startsWith('>') && (line.toLowerCase().includes('err') || line.toLowerCase().includes('exception'))) return true;
-                      }
+                  filteredLogs.map((line, idx) => {
+                    const isError = line.toLowerCase().includes('error') || line.toLowerCase().includes('exception') || line.toLowerCase().includes('fatal');
+                    const isWarning = line.toLowerCase().includes('warn') || line.toLowerCase().includes('warning');
+                    const isCommand = line.startsWith('>');
 
-                      // Search filtering
-                      if (diagSearch && !cleanAnsiCodes(line).toLowerCase().includes(diagSearch.toLowerCase())) {
-                        return false;
-                      }
-                      return true;
-                    });
+                    let color = 'rgba(255,255,255,0.85)';
+                    if (isError) color = 'var(--error)';
+                    else if (isWarning) color = 'var(--primary)';
+                    else if (isCommand) color = 'var(--secondary)';
 
-                    if (filtered.length === 0) {
-                      return (
-                        <div style={{ color: 'var(--text-dark)', textAlign: 'center', marginTop: '180px' }}>
-                          No log lines match the search criteria.
-                        </div>
-                      );
-                    }
-
-                    return filtered.map((line, idx) => {
-                      const isError = line.toLowerCase().includes('error') || line.toLowerCase().includes('exception') || line.toLowerCase().includes('fatal');
-                      const isWarning = line.toLowerCase().includes('warn') || line.toLowerCase().includes('warning');
-                      const isCommand = line.startsWith('>');
-
-                      let color = 'rgba(255,255,255,0.85)';
-                      if (isError) color = 'var(--error)';
-                      else if (isWarning) color = 'var(--primary)';
-                      else if (isCommand) color = 'var(--secondary)';
-
-                      return (
-                        <div 
-                          key={idx} 
-                          style={{ 
-                            color, 
-                            whiteSpace: 'pre-wrap', 
-                            wordBreak: 'break-all',
-                            padding: '2px 4px',
-                            borderRadius: '4px',
-                            backgroundColor: isError ? 'rgba(244, 63, 94, 0.05)' : 'transparent'
-                          }}
-                        >
-                          {renderLineWithLinks(cleanAnsiCodes(line))}
-                        </div>
-                      );
-                    });
-                  })()
+                    return (
+                      <div 
+                        key={idx} 
+                        style={{ 
+                          color, 
+                          whiteSpace: 'pre-wrap', 
+                          wordBreak: 'break-all',
+                          padding: '2px 4px',
+                          borderRadius: '4px',
+                          backgroundColor: isError ? 'rgba(244, 63, 94, 0.05)' : 'transparent'
+                        }}
+                      >
+                        {renderLineWithLinks(cleanAnsiCodes(line))}
+                      </div>
+                    );
+                  })
                 )}
               </div>
 
@@ -4999,17 +5386,18 @@ export default function ServerDetail() {
 
       {/* Create / Edit Schedule Modal Overlay */}
       {showScheduleModal && (
-        <div className="modal-overlay animate-fade-in">
+        <div className="modal-overlay animate-fade-in" role="dialog" aria-modal="true" aria-labelledby="schedule-modal-title">
           <div className="modal-content" style={{ maxWidth: '500px', width: '90%' }}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', color: 'var(--primary)' }}>
+            <h3 id="schedule-modal-title" style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 'bold', marginBottom: '16px', color: 'var(--primary)' }}>
               {editingSchedule ? 'Edit Scheduled Task' : 'Create Scheduled Task'}
             </h3>
 
             <form onSubmit={handleCreateOrUpdateSchedule}>
               <div className="form-group">
-                <label className="form-label">Task Name</label>
+                <label className="form-label" htmlFor="sched-create-name">Task Name</label>
                 <input
                   type="text"
+                  id="sched-create-name"
                   className="form-input"
                   placeholder="e.g. Daily Nightly Restart"
                   value={schedName}
@@ -5019,8 +5407,9 @@ export default function ServerDetail() {
               </div>
 
               <div className="form-group">
-                <label className="form-label">Action Target</label>
+                <label className="form-label" htmlFor="sched-create-action">Action Target</label>
                 <select
+                  id="sched-create-action"
                   value={schedAction}
                   onChange={(e) => setSchedAction(e.target.value)}
                   style={{
@@ -5041,9 +5430,10 @@ export default function ServerDetail() {
 
               {schedAction === 'command' && (
                 <div className="form-group animate-fade-in" style={{ marginBottom: '16px' }}>
-                  <label className="form-label">Console Command payload</label>
+                  <label className="form-label" htmlFor="sched-create-payload">Console Command payload</label>
                   <input
                     type="text"
+                    id="sched-create-payload"
                     className="form-input"
                     placeholder="e.g. say Server restarting in 5 minutes!"
                     value={schedPayload}
@@ -5319,9 +5709,9 @@ export default function ServerDetail() {
 
       {/* In-Browser Code File Editor Overlay */}
       {editingFile && (
-        <div className="modal-overlay">
+        <div className="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="editor-modal-title">
           <div className="modal-content" style={{ maxWidth: '800px', width: '90%' }}>
-            <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px' }}>
+            <h3 id="editor-modal-title" style={{ fontFamily: 'var(--font-heading)', fontSize: '18px', fontWeight: 'bold', marginBottom: '12px' }}>
               Edit File: {editingFile.name}
             </h3>
             <textarea

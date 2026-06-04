@@ -473,9 +473,11 @@ function getProcessMetrics(pid) {
           const dataLine = lines[1];
           const parts = dataLine.split(/\s+/);
           if (parts.length >= 2) {
-            const cpu = parseFloat(parts[0]) || 0;
+            const rawCpu = parseFloat(parts[0]) || 0;
+            const numCores = os.cpus().length || 1;
+            const cpu = Math.min(100, Math.max(0, Math.round(rawCpu / numCores)));
             const rssKB = parseInt(parts[1], 10) || 0;
-            return resolve({ cpu: Math.round(cpu), ram: rssKB * 1024 });
+            return resolve({ cpu, ram: rssKB * 1024 });
           }
         }
         resolve({ cpu: 0, ram: 0 });
@@ -776,8 +778,13 @@ function extractZipNative(zipPath, destDir) {
         logger.warn(`Native zip extraction failed for ${zipName}. Falling back to AdmZip...`);
         try {
           const zip = new AdmZip(zipPath);
-          zip.extractAllTo(destDir, true);
-          resolve();
+          zip.extractAllToAsync(destDir, true, false, (err) => {
+            if (err) {
+              reject(new Error(`All extraction methods failed for ${zipName}: ${err.message}`));
+            } else {
+              resolve();
+            }
+          });
         } catch (err) {
           reject(new Error(`All extraction methods failed for ${zipName}: ${err.message}`));
         }
@@ -816,6 +823,10 @@ function extractZipNative(zipPath, destDir) {
   });
 }
 
+// Global tracking for active installer tasks to support abort/cancellation
+let activeInstallerAbortController = null;
+let activeInstallerProcess = null;
+
 // Global state for Hytale Installer download progress
 let installerDownloadState = {
   status: 'idle', // 'idle' | 'downloading' | 'extracting' | 'completed' | 'failed' | 'awaiting_auth' | 'downloading_game'
@@ -827,20 +838,111 @@ let installerDownloadState = {
   authUrl: null,
   authCode: null,
   error: null,
+  logs: [],
 };
+
+function addInstallerLog(message) {
+  const time = new Date().toLocaleTimeString();
+  const line = `[${time}] ${message}`;
+  if (!installerDownloadState.logs) {
+    installerDownloadState.logs = [];
+  }
+  installerDownloadState.logs.push(line);
+  if (installerDownloadState.logs.length > 100) {
+    installerDownloadState.logs.shift();
+  }
+}
+
+async function abortInstaller() {
+  logger.info('Aborting Hytale central installer task...');
+  let abortedSomething = false;
+
+  if (activeInstallerAbortController) {
+    try {
+      activeInstallerAbortController.abort();
+      abortedSomething = true;
+      logger.info('Aborted active installer file download request.');
+    } catch (err) {
+      logger.error('Failed to abort installer download controller', err);
+    }
+    activeInstallerAbortController = null;
+  }
+
+  if (activeInstallerProcess) {
+    try {
+      activeInstallerProcess.kill('SIGKILL');
+      abortedSomething = true;
+      logger.info('Killed active hytale-downloader process.');
+    } catch (err) {
+      logger.error('Failed to kill active installer process', err);
+    }
+    activeInstallerProcess = null;
+  }
+
+  // Update installerDownloadState to reflecting aborted state
+  installerDownloadState.status = 'failed';
+  installerDownloadState.error = 'Installer task was manually aborted by administrator.';
+  installerDownloadState.progress = 0;
+  installerDownloadState.authUrl = null;
+  installerDownloadState.authCode = null;
+  addInstallerLog('Installer process aborted by administrator.');
+
+  return { aborted: abortedSomething, message: 'Hytale installer task aborted successfully.' };
+}
+
 
 function getInstallerDownloadState() {
   return installerDownloadState;
 }
 
-function isInstallerCached() {
+function isInstallerCached(dbOrVersion, possibleVersion) {
+  let db = null;
+  let version = 'release';
+  
+  if (possibleVersion !== undefined) {
+    db = dbOrVersion;
+    version = possibleVersion;
+  } else {
+    if (dbOrVersion && typeof dbOrVersion.prepare === 'function') {
+      db = dbOrVersion;
+      version = 'release';
+    } else {
+      version = dbOrVersion || 'release';
+    }
+  }
+
+  if (version === 'latest') {
+    version = 'release';
+  }
+
+  if (['release', 'pre-release'].includes(version)) {
+    if (db) {
+      try {
+        const cachedRow = db.prepare("SELECT version FROM cached_versions WHERE patchline = ? ORDER BY id DESC LIMIT 1").get(version);
+        if (cachedRow) {
+          version = cachedRow.version;
+        } else {
+          return false;
+        }
+      } catch (err) {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
   const sharedDir = path.join(__dirname, '..', '..', '..', 'shared');
-  const jarPath = path.join(sharedDir, 'Server', 'HytaleServer.jar');
-  const assetsPath = path.join(sharedDir, 'Assets.zip');
+  let dir = sharedDir;
+  if (version && version !== 'latest') {
+    dir = path.join(sharedDir, 'versions', version);
+  }
+  const jarPath = path.join(dir, 'Server', 'HytaleServer.jar');
+  const assetsPath = path.join(dir, 'Assets.zip');
   return fs.existsSync(jarPath) && fs.existsSync(assetsPath);
 }
 
-async function cacheInstaller(db, downloadUrl) {
+async function cacheInstaller(db, downloadUrl, version = 'release') {
   if (installerDownloadState.status === 'downloading' || installerDownloadState.status === 'extracting') {
     throw new HttpError(400, 'Installer download or extraction is already in progress.');
   }
@@ -865,161 +967,246 @@ async function cacheInstaller(db, downloadUrl) {
     speedFormatted: '0 B/s',
     etaFormatted: 'Estimating...',
     error: null,
+    logs: [],
   };
+  addInstallerLog(`Initializing installer download process for patchline "${version}"...`);
 
   // Run in background
   (async () => {
-    const maxRetries = 3;
-    let attempt = 0;
-    let success = false;
+    const isWin = process.platform === 'win32';
+    const binaryName = isWin ? 'hytale-downloader-windows-amd64.exe' : 'hytale-downloader-linux-amd64';
+    const binaryPath = path.join(sharedDir, binaryName);
+    let gameVersion = 'unknown';
 
-    while (attempt < maxRetries && !success) {
-      attempt++;
-      let fileStream = null;
-      let stallChecker = null;
-      const controller = new AbortController();
+    if (fs.existsSync(binaryPath)) {
+      addInstallerLog('Hytale downloader utility is already present. Skipping zip download.');
+      logger.info('Hytale downloader utility is already present. Skipping zip download.');
 
       try {
-        if (attempt > 1) {
-          logger.info(`Retrying Hytale installer download (attempt ${attempt}/${maxRetries}) after failure...`);
-          // Exponential backoff pause
-          await new Promise(resolve => setTimeout(resolve, attempt * 3000));
-        }
-
-        installerDownloadState.status = 'downloading';
-        installerDownloadState.error = null;
-        installerDownloadState.downloadedBytes = 0;
-        installerDownloadState.progress = 0;
-
-        logger.info(`Starting Hytale installer download from ${downloadUrl} (Attempt ${attempt}/${maxRetries})`);
+        addInstallerLog('Checking for updates to hytale-downloader...');
+        logger.info('Checking for updates to hytale-downloader...');
         
-        // Connect timeout setup
-        const connectionTimeout = setTimeout(() => {
-          if (installerDownloadState.downloadedBytes === 0) {
-            controller.abort();
-          }
-        }, 15000);
+        const child = spawn(binaryPath, ['-check-update'], { cwd: sharedDir });
+        activeInstallerProcess = child;
+        
+        child.stdout.on('data', (data) => {
+          const chunk = data.toString();
+          logger.info(`[Downloader Update] ${chunk.trim()}`);
+          addInstallerLog(`[Downloader Update] ${chunk.trim()}`);
+        });
 
-        const res = await fetch(downloadUrl, { signal: controller.signal });
-        clearTimeout(connectionTimeout);
+        child.stderr.on('data', (data) => {
+          const chunk = data.toString();
+          logger.warn(`[Downloader Update Error] ${chunk.trim()}`);
+          addInstallerLog(`[Downloader Update Error] ${chunk.trim()}`);
+        });
 
-        if (!res.ok) {
-          throw new Error(`Failed to download: ${res.statusText} (${res.status})`);
-        }
-
-        const totalBytes = parseInt(res.headers.get('content-length'), 10) || 0;
-        installerDownloadState.totalBytes = totalBytes;
-
-        fileStream = fs.createWriteStream(tempZipPath);
-
-        let lastDataTime = Date.now();
-        const startTime = Date.now();
-
-        // Stalls check interval (Aborts download if no chunks are received for 15 seconds)
-        stallChecker = setInterval(() => {
-          if (installerDownloadState.status === 'downloading' && Date.now() - lastDataTime > 15000) {
-            logger.warn('Hytale installer download stalled. Aborting stream...');
-            controller.abort();
-          }
-        }, 2000);
-
-        for await (const chunk of res.body) {
-          lastDataTime = Date.now();
-          installerDownloadState.downloadedBytes += chunk.length;
-          fileStream.write(chunk);
-
-          const elapsedSeconds = (Date.now() - startTime) / 1000;
-          if (elapsedSeconds > 0.5) {
-            const speed = installerDownloadState.downloadedBytes / elapsedSeconds;
-            
-            let speedFormatted = '';
-            if (speed > 1024 * 1024) {
-              speedFormatted = `${(speed / (1024 * 1024)).toFixed(2)} MB/s`;
-            } else if (speed > 1024) {
-              speedFormatted = `${(speed / 1024).toFixed(2)} KB/s`;
-            } else {
-              speedFormatted = `${speed.toFixed(0)} B/s`;
-            }
-            installerDownloadState.speedFormatted = speedFormatted;
-
-            if (totalBytes > 0) {
-              installerDownloadState.progress = Math.round((installerDownloadState.downloadedBytes / totalBytes) * 100);
-              const remainingBytes = totalBytes - installerDownloadState.downloadedBytes;
-              const etaSeconds = Math.max(0, Math.round(remainingBytes / speed));
-              
-              let etaFormatted = '';
-              if (etaSeconds > 60) {
-                etaFormatted = `${Math.floor(etaSeconds / 60)}m ${etaSeconds % 60}s`;
-              } else {
-                etaFormatted = `${etaSeconds}s`;
-              }
-              installerDownloadState.etaFormatted = etaFormatted;
-            }
-          }
-        }
-
-        clearInterval(stallChecker);
-        stallChecker = null;
-
-        await new Promise((resolve, reject) => {
-          fileStream.end((err) => {
-            if (err) reject(err);
-            else resolve();
+        const exitCode = await new Promise((resolve) => {
+          child.on('close', (code) => {
+            activeInstallerProcess = null;
+            resolve(code);
+          });
+          child.on('error', (err) => {
+            logger.error('Downloader update process error', err);
+            addInstallerLog(`Downloader update process error: ${err.message}`);
+            activeInstallerProcess = null;
+            resolve(-1);
           });
         });
 
-        // Rename temporary to finalized ZIP
-        if (fs.existsSync(zipPath)) {
-          fs.unlinkSync(zipPath);
-        }
-        fs.renameSync(tempZipPath, zipPath);
-        success = true;
-
+        addInstallerLog(`Update check finished with exit status ${exitCode}.`);
       } catch (err) {
-        logger.error(`Error on download attempt ${attempt}/${maxRetries}`, err);
-        if (stallChecker) clearInterval(stallChecker);
-        if (fileStream) {
-          try { fileStream.end(); } catch (_) {}
-        }
-        try {
-          if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
-        } catch (_) {}
+        logger.error('Failed to run update check:', err);
+        addInstallerLog(`Failed to run update check: ${err.message}`);
+      }
+    } else {
+      const maxRetries = 3;
+      let attempt = 0;
+      let success = false;
 
-        if (attempt >= maxRetries) {
-          installerDownloadState.status = 'failed';
-          installerDownloadState.error = `Download failed after ${maxRetries} attempts: ${err.message}`;
-          return;
+      while (attempt < maxRetries && !success) {
+        attempt++;
+        let fileStream = null;
+        let stallChecker = null;
+        const controller = new AbortController();
+        activeInstallerAbortController = controller;
+
+        try {
+          if (attempt > 1) {
+            logger.info(`Retrying Hytale installer download (attempt ${attempt}/${maxRetries}) after failure...`);
+            addInstallerLog(`Retrying Hytale installer download (attempt ${attempt}/${maxRetries}) after failure...`);
+            // Exponential backoff pause
+            await new Promise(resolve => setTimeout(resolve, attempt * 3000));
+          }
+
+          installerDownloadState.status = 'downloading';
+          installerDownloadState.error = null;
+          installerDownloadState.downloadedBytes = 0;
+          installerDownloadState.progress = 0;
+
+          logger.info(`Starting Hytale installer download from ${downloadUrl} (Attempt ${attempt}/${maxRetries})`);
+          addInstallerLog(`Starting Hytale installer download from ${downloadUrl} (Attempt ${attempt}/${maxRetries})`);
+          
+          // Connect timeout setup
+          const connectionTimeout = setTimeout(() => {
+            if (installerDownloadState.downloadedBytes === 0) {
+              addInstallerLog('Connection timed out. Aborting download...');
+              controller.abort();
+            }
+          }, 15000);
+
+          const res = await fetch(downloadUrl, { signal: controller.signal });
+          clearTimeout(connectionTimeout);
+
+          if (!res.ok) {
+            throw new Error(`Failed to download: ${res.statusText} (${res.status})`);
+          }
+
+          const totalBytes = parseInt(res.headers.get('content-length'), 10) || 0;
+          installerDownloadState.totalBytes = totalBytes;
+
+          fileStream = fs.createWriteStream(tempZipPath);
+
+          let lastDataTime = Date.now();
+          const startTime = Date.now();
+
+          // Stalls check interval (Aborts download if no chunks are received for 15 seconds)
+          stallChecker = setInterval(() => {
+            if (installerDownloadState.status === 'downloading' && Date.now() - lastDataTime > 15000) {
+              logger.warn('Hytale installer download stalled. Aborting stream...');
+              addInstallerLog('Hytale installer download stalled. Aborting stream...');
+              controller.abort();
+            }
+          }, 2000);
+
+          for await (const chunk of res.body) {
+            lastDataTime = Date.now();
+            installerDownloadState.downloadedBytes += chunk.length;
+            fileStream.write(chunk);
+
+            const elapsedSeconds = (Date.now() - startTime) / 1000;
+            if (elapsedSeconds > 0.5) {
+              const speed = installerDownloadState.downloadedBytes / elapsedSeconds;
+              
+              let speedFormatted = '';
+              if (speed > 1024 * 1024) {
+                speedFormatted = `${(speed / (1024 * 1024)).toFixed(2)} MB/s`;
+              } else if (speed > 1024) {
+                speedFormatted = `${(speed / 1024).toFixed(2)} KB/s`;
+              } else {
+                speedFormatted = `${speed.toFixed(0)} B/s`;
+              }
+              installerDownloadState.speedFormatted = speedFormatted;
+
+              if (totalBytes > 0) {
+                installerDownloadState.progress = Math.round((installerDownloadState.downloadedBytes / totalBytes) * 100);
+                const remainingBytes = totalBytes - installerDownloadState.downloadedBytes;
+                const etaSeconds = Math.max(0, Math.round(remainingBytes / speed));
+                
+                let etaFormatted = '';
+                if (etaSeconds > 60) {
+                  etaFormatted = `${Math.floor(etaSeconds / 60)}m ${etaSeconds % 60}s`;
+                } else {
+                  etaFormatted = `${etaSeconds}s`;
+                }
+                installerDownloadState.etaFormatted = etaFormatted;
+              }
+            }
+          }
+
+          clearInterval(stallChecker);
+          stallChecker = null;
+
+          await new Promise((resolve, reject) => {
+            fileStream.end((err) => {
+              if (err) reject(err);
+              else resolve();
+            });
+          });
+
+          // Rename temporary to finalized ZIP
+          if (fs.existsSync(zipPath)) {
+            fs.unlinkSync(zipPath);
+          }
+          fs.renameSync(tempZipPath, zipPath);
+          success = true;
+          activeInstallerAbortController = null;
+          addInstallerLog(`Installer ZIP downloaded successfully (${(installerDownloadState.totalBytes / (1024 * 1024)).toFixed(2)} MB).`);
+
+        } catch (err) {
+          activeInstallerAbortController = null;
+          logger.error(`Error on download attempt ${attempt}/${maxRetries}`, err);
+          addInstallerLog(`Download attempt ${attempt} failed: ${err.message}`);
+          if (stallChecker) clearInterval(stallChecker);
+          if (fileStream) {
+            try { fileStream.end(); } catch (_) {}
+          }
+          try {
+            if (fs.existsSync(tempZipPath)) fs.unlinkSync(tempZipPath);
+          } catch (_) {}
+
+          if (attempt >= maxRetries) {
+            installerDownloadState.status = 'failed';
+            installerDownloadState.error = `Download failed after ${maxRetries} attempts: ${err.message}`;
+            return;
+          }
         }
+      }
+
+      // Extraction phase
+      try {
+        logger.info('Extracting Hytale downloader utility ZIP...');
+        addInstallerLog('Extracting Hytale downloader utility ZIP...');
+        installerDownloadState.status = 'extracting';
+        installerDownloadState.progress = 100;
+
+        await extractZipNative(zipPath, sharedDir);
+        addInstallerLog('Hytale downloader utility ZIP extracted successfully.');
+
+        // Clean up zip
+        try {
+          fs.unlinkSync(zipPath);
+        } catch (_) {}
+      } catch (err) {
+        logger.error('Failed to extract downloader utility', err);
+        addInstallerLog(`Extraction failed: ${err.message}`);
+        installerDownloadState.status = 'failed';
+        installerDownloadState.error = err.message || 'Unknown extraction error';
+        return;
       }
     }
 
-    // Extraction phase
+    // Run Downloader utility automatically
     try {
-      logger.info('Extracting Hytale downloader utility ZIP...');
-      installerDownloadState.status = 'extracting';
-      installerDownloadState.progress = 100;
-
-      await extractZipNative(zipPath, sharedDir);
-
-      // Clean up zip
-      try {
-        fs.unlinkSync(zipPath);
-      } catch (_) {}
-
-      // Run Downloader utility automatically
-      const isWin = process.platform === 'win32';
-      const binaryName = isWin ? 'hytale-downloader-windows-amd64.exe' : 'hytale-downloader-linux-amd64';
-      const binaryPath = path.join(sharedDir, binaryName);
-
       if (fs.existsSync(binaryPath)) {
         if (!isWin) {
           fs.chmodSync(binaryPath, '755');
         }
 
         logger.info(`Spawning Hytale downloader utility: ${binaryName}`);
+        addInstallerLog(`Spawning Hytale downloader utility: ${binaryName}`);
         
+        // Query game version from the downloader
+        gameVersion = 'unknown';
+        try {
+          const { execSync } = require('child_process');
+          const queryOut = execSync(`"${binaryPath}" -patchline "${version}" -print-version -skip-update-check`, { encoding: 'utf8' });
+          gameVersion = queryOut.trim() || 'unknown';
+        } catch (err) {
+          logger.error(`Failed to query game version: ${err.message}`);
+          addInstallerLog(`Failed to query game version: ${err.message}`);
+        }
+        
+        if (gameVersion === 'unknown') {
+          gameVersion = version === 'pre-release' ? '0.6.0-pre.1.1' : '0.5.3';
+        }
+        
+        addInstallerLog(`Querying patchline "${version}" returned version: ${gameVersion}`);
+        installerDownloadState.targetGameVersion = gameVersion; // track in state
+
         // Spawn downloader inside shared/ directory to download the actual game.zip
-        const child = spawn(binaryPath, ['-download-path', 'game.zip', '-skip-update-check'], { cwd: sharedDir });
+        const child = spawn(binaryPath, ['-download-path', 'game.zip', '-skip-update-check', '-patchline', version], { cwd: sharedDir });
+        activeInstallerProcess = child;
         
         installerDownloadState.status = 'downloading_game';
         installerDownloadState.progress = 0;
@@ -1030,6 +1217,7 @@ async function cacheInstaller(db, downloadUrl) {
         child.stdout.on('data', (data) => {
           const chunk = data.toString();
           logger.info(`[Downloader] ${chunk.trim()}`);
+          addInstallerLog(`[Downloader] ${chunk.trim()}`);
 
           // Parse visit / code prompt for authentication
           if (chunk.includes('visit') || chunk.includes('http') || chunk.includes('code') || chunk.includes('device')) {
@@ -1038,9 +1226,16 @@ async function cacheInstaller(db, downloadUrl) {
               installerDownloadState.status = 'awaiting_auth';
               installerDownloadState.authUrl = urls[0].replace(/[.,;:()'"\s]$/, '');
             }
-            const codes = chunk.match(/\b([A-Z0-9]{4}-[A-Z0-9]{4}|[A-Z0-9]{6,8})\b/i);
-            if (codes && codes[0]) {
-              installerDownloadState.authCode = codes[0];
+            
+            // Contextual extraction of the authentication code to avoid matching general words like "Please"
+            const codeMatch = chunk.match(/code:\s*([A-Za-z0-9]{6,10})/i) || chunk.match(/user_code=([A-Za-z0-9]{6,10})/i);
+            if (codeMatch && codeMatch[1]) {
+              installerDownloadState.authCode = codeMatch[1];
+            } else {
+              const codes = chunk.match(/\b([A-Z0-9]{4}-[A-Z0-9]{4}|[A-Z0-9]{6,8})\b/i);
+              if (codes && codes[0] && codes[0].toLowerCase() !== 'please') {
+                installerDownloadState.authCode = codes[0];
+              }
             }
           }
 
@@ -1059,42 +1254,74 @@ async function cacheInstaller(db, downloadUrl) {
         child.stderr.on('data', (data) => {
           const chunk = data.toString();
           logger.warn(`[Downloader Error] ${chunk.trim()}`);
+          addInstallerLog(`[Downloader Error] ${chunk.trim()}`);
         });
 
         const exitCode = await new Promise((resolve) => {
-          child.on('close', (code) => resolve(code));
+          child.on('close', (code) => {
+            activeInstallerProcess = null;
+            addInstallerLog(`Downloader utility exited with code ${code}`);
+            resolve(code);
+          });
           child.on('error', (err) => {
             logger.error('Downloader utility process error', err);
+            addInstallerLog(`Downloader process execution error: ${err.message}`);
+            activeInstallerProcess = null;
             resolve(-1);
           });
         });
+
+        gameVersion = installerDownloadState.targetGameVersion || (version === 'pre-release' ? '0.6.0-pre.1.1' : '0.5.3');
 
         if (exitCode === 0) {
           // If exited successfully, game.zip is downloaded inside shared/
           const gameZipPath = path.join(sharedDir, 'game.zip');
           if (fs.existsSync(gameZipPath)) {
-            logger.info('Extracting game release files from game.zip...');
+            logger.info(`Extracting game files from game.zip for version ${gameVersion}...`);
+            addInstallerLog(`Extracting game files from game.zip for version ${gameVersion}...`);
             installerDownloadState.status = 'extracting';
             installerDownloadState.progress = 100;
             installerDownloadState.authUrl = null;
             installerDownloadState.authCode = null;
 
-            await extractZipNative(gameZipPath, sharedDir);
+            const targetExtractDir = path.join(sharedDir, 'versions', gameVersion);
+            if (!fs.existsSync(targetExtractDir)) {
+              fs.mkdirSync(targetExtractDir, { recursive: true });
+            }
+
+            await extractZipNative(gameZipPath, targetExtractDir);
+            addInstallerLog(`Hytale game files extracted successfully to versions/${gameVersion}.`);
 
             // Clean up game.zip
             try {
               fs.unlinkSync(gameZipPath);
             } catch (_) {}
+
+            // Save record in db
+            try {
+              db.prepare(`
+                INSERT INTO cached_versions (version, folder_name, patchline, cached_at)
+                VALUES (?, ?, ?, datetime('now'))
+                ON CONFLICT(version) DO UPDATE SET folder_name = excluded.folder_name, patchline = excluded.patchline, cached_at = datetime('now')
+              `).run(gameVersion, gameVersion, version);
+              addInstallerLog(`Recorded version "${gameVersion}" for patchline "${version}" in database.`);
+            } catch (dbErr) {
+              logger.error(`Failed to write version info to database: ${dbErr.message}`);
+              addInstallerLog(`Failed to record version in database: ${dbErr.message}`);
+            }
           }
         }
       }
 
       // Fallback: If required assets still missing, generate mock Hytale assets for local testing
-      if (!isInstallerCached()) {
-        logger.info('ZIP did not contain required Hytale server files. Generating dummy Assets.zip and Server/HytaleServer.jar for testing...');
+      gameVersion = installerDownloadState.targetGameVersion || (version === 'pre-release' ? '0.6.0-pre.1.1' : '0.5.3');
+      const targetExtractDir = path.join(sharedDir, 'versions', gameVersion);
+      if (!isInstallerCached(gameVersion)) {
+        logger.info(`ZIP did not contain required Hytale server files. Generating dummy Assets.zip and Server/HytaleServer.jar for testing in ${targetExtractDir}...`);
+        addInstallerLog(`Generating dummy mock Assets.zip and Server/HytaleServer.jar for local testing in ${gameVersion}...`);
         
         // 1. Create Server/ directory
-        const serverDir = path.join(sharedDir, 'Server');
+        const serverDir = path.join(targetExtractDir, 'Server');
         if (!fs.existsSync(serverDir)) {
           fs.mkdirSync(serverDir, { recursive: true });
         }
@@ -1108,22 +1335,33 @@ async function cacheInstaller(db, downloadUrl) {
         }
 
         // 3. Create dummy Assets.zip if missing
-        const assetsPath = path.join(sharedDir, 'Assets.zip');
+        const assetsPath = path.join(targetExtractDir, 'Assets.zip');
         if (!fs.existsSync(assetsPath)) {
           const assetsZip = new AdmZip();
           assetsZip.addFile('config.json', Buffer.from('{}'));
           assetsZip.writeZip(assetsPath);
         }
+
+        // Save record in db for fallback
+        try {
+          db.prepare(`
+            INSERT INTO cached_versions (version, folder_name, patchline, cached_at)
+            VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(version) DO UPDATE SET folder_name = excluded.folder_name, patchline = excluded.patchline, cached_at = datetime('now')
+          `).run(gameVersion, gameVersion, version);
+        } catch (_) {}
       }
 
-      if (!isInstallerCached()) {
+      if (!isInstallerCached(gameVersion)) {
         throw new Error('Game extraction failed, and required Assets.zip or Server/HytaleServer.jar was not found.');
       }
 
       installerDownloadState.status = 'completed';
+      addInstallerLog('Hytale server files successfully cached and verified.');
       logger.info('Hytale server files successfully cached and verified.');
     } catch (err) {
       logger.error('Failed to run Hytale downloader utility or extract server files', err);
+      addInstallerLog(`Installer process failed: ${err.message}`);
       installerDownloadState.status = 'failed';
       installerDownloadState.error = err.message || 'Unknown extraction error';
       try {
@@ -1142,7 +1380,22 @@ function resolveServerVersion(db, server) {
   let version = server.server_version || 'Use Global Default';
   if (version === 'Use Global Default') {
     const row = db.prepare("SELECT value FROM settings WHERE key = 'default_server_version'").get();
-    version = row ? row.value : 'latest';
+    version = row ? row.value : 'release';
+  }
+  if (version === 'latest') {
+    version = 'release';
+  }
+  
+  // Resolve patchline to specific version if database mappings exist
+  if (['release', 'pre-release'].includes(version)) {
+    try {
+      const cachedRow = db.prepare("SELECT version FROM cached_versions WHERE patchline = ? ORDER BY id DESC LIMIT 1").get(version);
+      if (cachedRow) {
+        return cachedRow.version;
+      }
+    } catch (e) {
+      logger.error('Failed to resolve server version from database', e);
+    }
   }
   return version;
 }
@@ -1153,11 +1406,11 @@ async function installServerFiles(db, serverId) {
     throw new HttpError(400, 'Server files are already installed.');
   }
 
-  if (!isInstallerCached()) {
-    throw new HttpError(400, 'Central Hytale installer cache is missing or corrupt. Go to Settings to download it first.');
+  const version = resolveServerVersion(db, server);
+  if (!isInstallerCached(version)) {
+    throw new HttpError(400, `Central Hytale installer cache for version "${version}" is missing or corrupt. Go to Settings to download it first.`);
   }
 
-  const version = resolveServerVersion(db, server);
   logger.info(`Deploying Hytale server files (version: ${version}) to server ID ${serverId}...`);
 
   const sharedDir = path.join(__dirname, '..', '..', '..', 'shared');
@@ -1282,9 +1535,11 @@ module.exports = {
   getInstallerDownloadState,
   isInstallerCached,
   cacheInstaller,
+  abortInstaller,
   installServerFiles,
   classifyConsoleIssue,
   getDiskUsage,
+  resolveServerVersion,
 };
 // Java 25 reload trigger comment
 

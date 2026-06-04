@@ -220,6 +220,24 @@ const migrations = [
         logger.warn('Failed to add server_version column, it might already exist:', err.message);
       }
     }
+  },
+  {
+    name: '006_add_cached_versions_table',
+    up: (db) => {
+      try {
+        db.exec(`
+          CREATE TABLE IF NOT EXISTS cached_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version TEXT NOT NULL UNIQUE,
+            folder_name TEXT NOT NULL,
+            patchline TEXT NOT NULL,
+            cached_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+        `);
+      } catch (err) {
+        logger.error('Failed to create cached_versions table:', err.message);
+      }
+    }
   }
 ];
 

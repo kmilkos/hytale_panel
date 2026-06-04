@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const { requireAuth } = require('../middleware/auth');
 const { HttpError } = require('../middleware/errorHandler');
-const { getServer } = require('../services/serverService');
+const { getServer, resolveServerVersion, installServerFiles, isInstallerCached } = require('../services/serverService');
 const { resolveSafePath } = require('../services/fileService');
 const curseForgeService = require('../services/curseForgeService');
 const nexusModsService = require('../services/nexusModsService');
@@ -271,16 +271,19 @@ module.exports = function(db) {
   router.get('/server/:serverId/updates', async (req, res, next) => {
     const { serverId } = req.params;
     try {
+      const server = getServer(db, parseInt(serverId, 10));
+      const version = resolveServerVersion(db, server);
       const dbMods = db.prepare("SELECT * FROM installed_mods WHERE server_id = ? AND curseforge_mod_id != 'manual'").all(serverId);
       const updates = [];
 
       for (const mod of dbMods) {
         try {
-          const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 5 });
-          if (files.length === 0) continue;
+          const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 20 });
+          // Filter files compatible with the server's Hytale version
+          const compatibleFiles = files.filter(f => Array.isArray(f.gameVersions) && f.gameVersions.includes(version));
+          if (compatibleFiles.length === 0) continue;
 
-          // Find the latest compatible or newest file (typically the first returned)
-          const latestFile = files[0];
+          const latestFile = compatibleFiles[0];
           const latestFileId = parseInt(latestFile.id, 10);
           const currentFileId = parseInt(mod.curseforge_file_id, 10);
 
@@ -296,7 +299,9 @@ module.exports = function(db) {
               latestFileName: latestFile.fileName,
               latestFileLength: latestFile.fileLength,
               latestSha1: sha1Hash ? sha1Hash.value : null,
-              latestDownloadUrl: latestFile.downloadUrl
+              latestDownloadUrl: latestFile.downloadUrl,
+              gameVersion: version,
+              gameVersions: latestFile.gameVersions
             });
           }
         } catch (err) {
@@ -306,6 +311,279 @@ module.exports = function(db) {
       }
 
       res.json({ updates });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // GET /api/servers/:serverId/mods/sync-status - Check if server Hytale version and mods are ready to upgrade to latest
+  router.get('/server/:serverId/sync-status', async (req, res, next) => {
+    const { serverId } = req.params;
+    try {
+      const server = getServer(db, parseInt(serverId, 10));
+      const currentVersion = resolveServerVersion(db, server);
+
+      // Find the latest cached version of the 'release' patchline
+      const cachedRow = db.prepare("SELECT version FROM cached_versions WHERE patchline = 'release' ORDER BY id DESC LIMIT 1").get();
+      const targetVersion = cachedRow ? cachedRow.version : 'release';
+
+      if (currentVersion === targetVersion) {
+        return res.json({
+          syncAvailable: false,
+          currentVersion,
+          targetVersion,
+          reason: `Server is already running the latest version (${targetVersion}).`,
+          modsToUpdate: []
+        });
+      }
+
+      // Check if 'release' is cached
+      const latestCached = isInstallerCached(db, 'release');
+      if (!latestCached) {
+        return res.json({
+          syncAvailable: false,
+          currentVersion,
+          targetVersion,
+          reason: "Hytale 'release' cache is not downloaded. Please download it in System Settings.",
+          modsToUpdate: []
+        });
+      }
+
+      // Fetch all installed CurseForge mods
+      const dbMods = db.prepare("SELECT * FROM installed_mods WHERE server_id = ? AND curseforge_mod_id != 'manual'").all(serverId);
+      
+      const modsToUpdate = [];
+      let allCompatible = true;
+      let reason = '';
+
+      for (const mod of dbMods) {
+        try {
+          const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 20 });
+          // Find the latest file compatible with targetVersion or 'release'
+          const latestCompatibleFile = files.find(f => Array.isArray(f.gameVersions) && (f.gameVersions.includes(targetVersion) || f.gameVersions.includes('release')));
+
+          if (!latestCompatibleFile) {
+            allCompatible = false;
+            reason = `Mod "${mod.mod_name}" does not have a release compatible with Hytale ${targetVersion}.`;
+            break;
+          }
+
+          // If the latest compatible file ID is different from current file ID, it needs update
+          if (String(latestCompatibleFile.id) !== String(mod.curseforge_file_id)) {
+            const sha1Hash = latestCompatibleFile.hashes ? latestCompatibleFile.hashes.find(h => h.algo === 1 || h.algo === 'sha1') : null;
+            modsToUpdate.push({
+              fileName: mod.file_name,
+              modName: mod.mod_name,
+              curseforgeModId: mod.curseforge_mod_id,
+              currentFileId: mod.curseforge_file_id,
+              updateFileId: latestCompatibleFile.id,
+              updateVersion: latestCompatibleFile.displayName,
+              updateFileName: latestCompatibleFile.fileName,
+              updateFileLength: latestCompatibleFile.fileLength,
+              updateSha1: sha1Hash ? sha1Hash.value : null,
+              updateDownloadUrl: latestCompatibleFile.downloadUrl
+            });
+          }
+        } catch (err) {
+          allCompatible = false;
+          reason = `Failed to retrieve compatibility info for "${mod.mod_name}": ${err.message}`;
+          break;
+        }
+      }
+
+      res.json({
+        syncAvailable: allCompatible,
+        currentVersion,
+        targetVersion,
+        reason: allCompatible ? `All mods are compatible with Hytale ${targetVersion}!` : reason,
+        modsToUpdate
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/servers/:serverId/mods/sync-upgrade - Upgrade Hytale server and all mods concurrently
+  router.post('/server/:serverId/sync-upgrade', async (req, res, next) => {
+    const { serverId } = req.params;
+    try {
+      const server = getServer(db, parseInt(serverId, 10));
+      const currentVersion = resolveServerVersion(db, server);
+
+      // Find the latest cached version of the 'release' patchline
+      const cachedRow = db.prepare("SELECT version FROM cached_versions WHERE patchline = 'release' ORDER BY id DESC LIMIT 1").get();
+      const targetVersion = cachedRow ? cachedRow.version : 'release';
+
+      if (currentVersion === targetVersion) {
+        throw new HttpError(400, `Server is already running the latest version (${targetVersion}).`);
+      }
+
+      if (server.isRunning) {
+        throw new HttpError(400, 'Server must be stopped before performing an upgrade.');
+      }
+
+      // Check if 'release' is cached
+      const latestCached = isInstallerCached(db, 'release');
+      if (!latestCached) {
+        throw new HttpError(400, "Central Hytale 'release' cache is missing. Please download it first.");
+      }
+
+      // Fetch all installed CurseForge mods
+      const dbMods = db.prepare("SELECT * FROM installed_mods WHERE server_id = ? AND curseforge_mod_id != 'manual'").all(serverId);
+      
+      const modsToUpgrade = [];
+
+      for (const mod of dbMods) {
+        const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 20 });
+        // Find the latest file compatible with targetVersion or 'release'
+        const latestCompatibleFile = files.find(f => Array.isArray(f.gameVersions) && (f.gameVersions.includes(targetVersion) || f.gameVersions.includes('release')));
+
+        if (!latestCompatibleFile) {
+          throw new HttpError(400, `Mod "${mod.mod_name}" does not have a version compatible with Hytale ${targetVersion}.`);
+        }
+
+        // Add to upgrade list if the file ID differs
+        if (String(latestCompatibleFile.id) !== String(mod.curseforge_file_id)) {
+          const sha1Hash = latestCompatibleFile.hashes ? latestCompatibleFile.hashes.find(h => h.algo === 1 || h.algo === 'sha1') : null;
+          modsToUpgrade.push({
+            mod,
+            file: latestCompatibleFile,
+            sha1: sha1Hash ? sha1Hash.value : null
+          });
+        }
+      }
+
+      // Perform updates
+      const modsDir = path.join(server.install_path, 'mods');
+      if (!fs.existsSync(modsDir)) {
+        fs.mkdirSync(modsDir, { recursive: true });
+      }
+
+      const crypto = require('crypto');
+      const logger = require('../utils/logger');
+
+      for (const upgrade of modsToUpgrade) {
+        const { mod, file, sha1 } = upgrade;
+        let downloadUrl = file.downloadUrl;
+
+        // Resolve real CurseForge download URL
+        if (!downloadUrl) {
+          downloadUrl = await curseForgeService.getModFileDownloadUrl(db, mod.curseforge_mod_id, file.id, file.fileName);
+        }
+        if (!downloadUrl) {
+          downloadUrl = curseForgeService.buildCdnUrl(file.id, file.fileName);
+        }
+
+        logger.info(`Upgrading mod "${mod.mod_name}" for coordinated server upgrade to Hytale ${targetVersion}: downloading ${file.fileName}`);
+        
+        // Fetch file synchronously/sequentially
+        const resFile = await fetch(downloadUrl, {
+          redirect: 'follow',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+            'Accept': 'application/octet-stream, */*',
+          }
+        });
+
+        if (!resFile.ok) {
+          throw new Error(`Failed to download mod ${file.fileName}: ${resFile.statusText} (${resFile.status})`);
+        }
+
+        const targetPath = resolveSafePath(server.install_path, path.join('mods', file.fileName));
+        const tempPath = `${targetPath}.tmp`;
+        const fileStream = fs.createWriteStream(tempPath);
+        const sha1Hash = crypto.createHash('sha1');
+
+        for await (const chunk of resFile.body) {
+          sha1Hash.update(chunk);
+          fileStream.write(chunk);
+        }
+
+        await new Promise((resolve, reject) => {
+          fileStream.end((err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+
+        const calculatedSha1 = sha1Hash.digest('hex');
+        if (sha1 && sha1.toLowerCase() !== calculatedSha1.toLowerCase()) {
+          try { fs.unlinkSync(tempPath); } catch (_) {}
+          throw new Error(`Checksum mismatch for ${file.fileName}! Expected: ${sha1}, got: ${calculatedSha1}`);
+        }
+
+        // Delete old mod file
+        const oldPath = resolveSafePath(server.install_path, path.join('mods', mod.file_name));
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
+
+        // Rename temp to target
+        if (fs.existsSync(targetPath)) {
+          fs.unlinkSync(targetPath);
+        }
+        fs.renameSync(tempPath, targetPath);
+
+        // Delete old database record first to prevent duplicates/violations
+        db.prepare('DELETE FROM installed_mods WHERE server_id = ? AND curseforge_mod_id = ? AND curseforge_file_id = ?')
+          .run(serverId, String(mod.curseforge_mod_id), String(mod.curseforge_file_id));
+
+        // Insert/Update database record
+        const relativeInstalledPath = path.relative(server.install_path, targetPath);
+        db.prepare(`
+          INSERT INTO installed_mods (
+            server_id, curseforge_mod_id, curseforge_file_id, mod_name, file_name,
+            file_length, sha1, cdn_url, cdn_url_resolved_at, installed_path, installed_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+          ON CONFLICT(server_id, curseforge_mod_id, curseforge_file_id) DO UPDATE SET
+            file_name = excluded.file_name,
+            file_length = excluded.file_length,
+            sha1 = excluded.sha1,
+            cdn_url = excluded.cdn_url,
+            cdn_url_resolved_at = excluded.cdn_url_resolved_at,
+            installed_path = excluded.installed_path,
+            updated_at = datetime('now')
+        `).run(
+          serverId,
+          String(mod.curseforge_mod_id),
+          String(file.id),
+          mod.mod_name,
+          file.fileName,
+          file.fileLength || 0,
+          calculatedSha1,
+          downloadUrl,
+          new Date().toISOString(),
+          relativeInstalledPath
+        );
+      }
+
+      // Re-detect conflicts
+      await detectConflicts(db, serverId);
+
+      // Change the server version in database to 'release' channel
+      db.prepare("UPDATE servers SET server_version = ?, updated_at = datetime('now') WHERE id = ?")
+        .run('release', serverId);
+
+      // Re-deploy server files. Temporarily bypass the 'uninstalled' constraint.
+      db.prepare("UPDATE servers SET status = 'uninstalled' WHERE id = ?").run(serverId);
+      await installServerFiles(db, serverId);
+      db.prepare("UPDATE servers SET status = 'stopped' WHERE id = ?").run(serverId);
+
+      // Add to audit log
+      db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
+        .run(
+          req.user.sub,
+          'coordinated-upgrade',
+          `server:${serverId}`,
+          `Upgraded server Hytale version to release (v${targetVersion}). Upgraded ${modsToUpgrade.length} mods to compatible versions.`,
+          req.ip
+        );
+
+      res.json({
+        success: true,
+        message: `Server and mods upgraded successfully to Hytale release (v${targetVersion}).`
+      });
+
     } catch (err) {
       next(err);
     }
