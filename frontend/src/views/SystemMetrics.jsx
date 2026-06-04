@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { apiRequest, getUser, clearToken, API_BASE_URL, getToken } from '../utils/api';
+import { apiRequest, getUser, clearToken } from '../utils/api';
 
 export default function SystemMetrics() {
-  const [user, setUser] = useState(null);
+  const [user] = useState(() => getUser());
   const [stats, setStats] = useState(null);
   const [metrics, setMetrics] = useState([]);
   const [metricsRange, setMetricsRange] = useState('30m');
@@ -15,13 +15,42 @@ export default function SystemMetrics() {
 
   const navigate = useNavigate();
 
+  async function fetchStats() {
+    try {
+      const data = await apiRequest('/system/stats');
+      setStats(data);
+    } catch (err) {
+      console.error('Failed to fetch system stats', err);
+    }
+  }
+
+  const getMetricsLimit = (range) => {
+    switch (range) {
+      case '1m': return 2;     // Last 2 ticks
+      case '30m': return 60;   // Last 60 ticks (30 mins at 30s/tick)
+      case '1h': return 120;   // Last 120 ticks (1 hr at 30s/tick)
+      default: return 60;
+    }
+  };
+
+  async function fetchMetrics(rangeVal) {
+    try {
+      const activeRange = rangeVal || metricsRangeRef.current;
+      const limit = getMetricsLimit(activeRange);
+      const data = await apiRequest(`/system/metrics?limit=${limit}`);
+      setMetrics(data || []);
+    } catch (err) {
+      console.error('Failed to fetch historical system metrics', err);
+    }
+  }
+
   useEffect(() => {
     document.title = 'System Metrics | Hytale Panel';
     const curUser = getUser();
     if (!curUser) {
       navigate('/login');
     } else {
-      setUser(curUser);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       fetchStats();
       fetchMetrics();
 
@@ -34,6 +63,7 @@ export default function SystemMetrics() {
         clearInterval(metricsInterval);
       };
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   // Compute live CPU logical core loads between polls
@@ -55,42 +85,17 @@ export default function SystemMetrics() {
           if (totalDiff === 0) return 0;
           return Math.min(100, Math.max(0, Math.round((1 - idleDiff / totalDiff) * 100)));
         });
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setCoreUsages(newUsages);
       } else {
         setCoreUsages(stats.cpus.map(() => 0));
       }
       setPrevCpus(stats.cpus);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stats]);
 
-  const fetchStats = async () => {
-    try {
-      const data = await apiRequest('/system/stats');
-      setStats(data);
-    } catch (err) {
-      console.error('Failed to fetch system stats', err);
-    }
-  };
 
-  const getMetricsLimit = (range) => {
-    switch (range) {
-      case '1m': return 2;     // Last 2 ticks
-      case '30m': return 60;   // Last 60 ticks (30 mins at 30s/tick)
-      case '1h': return 120;   // Last 120 ticks (1 hr at 30s/tick)
-      default: return 60;
-    }
-  };
-
-  const fetchMetrics = async (rangeVal) => {
-    try {
-      const activeRange = rangeVal || metricsRangeRef.current;
-      const limit = getMetricsLimit(activeRange);
-      const data = await apiRequest(`/system/metrics?limit=${limit}`);
-      setMetrics(data || []);
-    } catch (err) {
-      console.error('Failed to fetch historical system metrics', err);
-    }
-  };
 
   const handleRangeChange = (newRange) => {
     metricsRangeRef.current = newRange;
@@ -128,10 +133,10 @@ export default function SystemMetrics() {
 
     const getY = (val, max) => height - padding - (val / max) * (height - 2 * padding);
 
-    let points = '';
-    let maxVal = 100;
-    let color = 'var(--primary)';
-    let fill = 'var(--primary-glow)';
+    let points;
+    let maxVal;
+    let color;
+    let fill;
 
     if (type === 'cpu') {
       maxVal = 100;

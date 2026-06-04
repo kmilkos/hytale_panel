@@ -12,6 +12,7 @@ const {
   cacheInstaller,
   getDiskUsage,
   abortInstaller,
+  resolveServerVersion,
 } = require('../services/serverService');
 
 module.exports = function(db) {
@@ -329,6 +330,128 @@ module.exports = function(db) {
         .run(req.user.sub, 'abort-installer', 'system', 'Manually aborted Hytale installer process', req.ip);
 
       res.json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // POST /api/system/check-files - Scans filesystem for manually placed Hytale server cache files and registers them
+  router.post('/check-files', async (req, res, next) => {
+    try {
+      const sharedDir = path.join(__dirname, '..', '..', '..', 'shared');
+      const versionsDir = path.join(sharedDir, 'versions');
+      const detected = [];
+
+      // Helper function to check if a specific version directory is cached
+      const verifyVersionCached = (ver) => {
+        const dir = path.join(versionsDir, ver);
+        const jarPath = path.join(dir, 'Server', 'HytaleServer.jar');
+        const assetsPath = path.join(dir, 'Assets.zip');
+        return fs.existsSync(jarPath) && fs.existsSync(assetsPath);
+      };
+
+      if (fs.existsSync(versionsDir)) {
+        const items = fs.readdirSync(versionsDir);
+        
+        // Prepare database statement to register version
+        const insertStmt = db.prepare(`
+          INSERT INTO cached_versions (version, folder_name, patchline, cached_at)
+          VALUES (?, ?, ?, datetime('now'))
+          ON CONFLICT(version) DO UPDATE SET folder_name = excluded.folder_name, cached_at = datetime('now')
+        `);
+
+        for (const item of items) {
+          const itemPath = path.join(versionsDir, item);
+          if (fs.statSync(itemPath).isDirectory()) {
+            if (verifyVersionCached(item)) {
+              // Determine patchline (guess based on version name)
+              let patchline = 'release';
+              if (item.toLowerCase().includes('pre') || item.toLowerCase().includes('alpha') || item.toLowerCase().includes('beta') || item.toLowerCase().includes('dev')) {
+                patchline = 'pre-release';
+              }
+              
+              // Register in DB
+              insertStmt.run(item, item, patchline);
+              
+              detected.push({
+                version: item,
+                patchline,
+                status: 'verified'
+              });
+            }
+          }
+        }
+      }
+
+      // Log the action to audit log
+      db.prepare('INSERT INTO audit_log (user_id, action, target, details, ip) VALUES (?, ?, ?, ?, ?)')
+        .run(
+          req.user.sub,
+          'check-files',
+          'system',
+          `Scanned cache directories and registered ${detected.length} versions: ${detected.map(d => d.version).join(', ')}`,
+          req.ip
+        );
+
+      res.json({
+        success: true,
+        message: `Scan complete. Detected and registered ${detected.length} version(s).`,
+        detected
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // DELETE /api/system/cache/:version - Delete a cached server version
+  router.delete('/cache/:version', (req, res, next) => {
+    const { version } = req.params;
+    try {
+      // 1. Resolve to target version if a patchline is given
+      let targetVersion = version;
+      if (['release', 'pre-release'].includes(version)) {
+        const cachedRow = db.prepare("SELECT version FROM cached_versions WHERE patchline = ? ORDER BY id DESC LIMIT 1").get(version);
+        if (cachedRow) {
+          targetVersion = cachedRow.version;
+        } else {
+          throw new HttpError(404, `No cached version found for patchline "${version}"`);
+        }
+      }
+
+      // 2. Check if any running server is using this version
+      const servers = db.prepare('SELECT id, name, status, server_version FROM servers').all();
+      const runningUsingServers = [];
+      
+      for (const s of servers) {
+        const resolved = resolveServerVersion(db, s);
+        if (resolved === targetVersion) {
+          if (s.status === 'running') {
+            runningUsingServers.push(s.name);
+          }
+        }
+      }
+
+      if (runningUsingServers.length > 0) {
+        throw new HttpError(400, `Cannot delete cache for version "${targetVersion}" because it is currently in use by running server(s): ${runningUsingServers.join(', ')}. Please stop them first.`);
+      }
+
+      // 3. Delete directory recursively
+      const sharedDir = path.join(__dirname, '..', '..', '..', 'shared');
+      const versionDir = path.join(sharedDir, 'versions', targetVersion);
+      if (fs.existsSync(versionDir)) {
+        fs.rmSync(versionDir, { recursive: true, force: true });
+      }
+
+      // 4. Delete from database table cached_versions
+      db.prepare('DELETE FROM cached_versions WHERE version = ?').run(targetVersion);
+
+      // 5. Audit Log
+      db.prepare(`
+        INSERT INTO audit_log (user_id, action, target, details, ip)
+        VALUES (?, 'delete-cache', ?, ?, ?)
+      `).run(req.user.sub, `cache:${targetVersion}`, `Deleted Hytale server version cache for ${targetVersion}`, req.ip);
+
+      res.json({ message: `Successfully deleted server cache for version "${targetVersion}".` });
     } catch (err) {
       next(err);
     }

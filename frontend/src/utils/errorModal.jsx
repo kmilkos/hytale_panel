@@ -1,5 +1,5 @@
-// src/utils/errorModal.jsx
-import React, { useState, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 
 function ErrorModalComponent({ message, title, details, onClose }) {

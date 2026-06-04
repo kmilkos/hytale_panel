@@ -36,7 +36,7 @@ export function getUser() {
       role: payload.role,
       exp: payload.exp
     };
-  } catch (err) {
+  } catch {
     return null;
   }
 }
@@ -69,7 +69,7 @@ export async function apiRequest(endpoint, options = {}) {
     if (!options.skipErrorModal) {
       showError('Cannot connect to the server. Please ensure the backend is running.', { details: networkErr.message });
     }
-    throw new Error(`Cannot connect to the server. Make sure the backend is running on port 5600. (${networkErr.message})`);
+    throw new Error(`Cannot connect to the server. Make sure the backend is running on port 5600. (${networkErr.message})`, { cause: networkErr });
   }
 
   if (res.status === 401) {

@@ -1,15 +1,17 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiRequest, getUser, clearToken, API_BASE_URL, getToken } from '../utils/api';
 import { showConfirm } from '../utils/confirm';
 
 export default function SystemSettings() {
-  const [user, setUser] = useState(null);
+  const [user] = useState(() => getUser());
   const [stats, setStats] = useState(null);
   
   // Settings Form State
   const [cfKey, setCfKey] = useState('');
   const [nxKey, setNxKey] = useState('');
+  const [showCfKey, setShowCfKey] = useState(false);
+  const [showNxKey, setShowNxKey] = useState(false);
   const [defaultVersion, setDefaultVersion] = useState('release');
   const [saveSuccess, setSaveSuccess] = useState('');
   const [saveError, setSaveError] = useState('');
@@ -29,6 +31,7 @@ export default function SystemSettings() {
   const [installerUrl, setInstallerUrl] = useState('');
   const [downloadingInstaller, setDownloadingInstaller] = useState(false);
   const [installerError, setInstallerError] = useState('');
+  const [checkingFiles, setCheckingFiles] = useState(false);
 
   // User Management State
   const [users, setUsers] = useState([]);
@@ -51,7 +54,6 @@ export default function SystemSettings() {
     if (!curUser) {
       navigate('/login');
     } else {
-      setUser(curUser);
       fetchStats();
       fetchSettings();
       fetchAuditLogs(1);
@@ -67,6 +69,7 @@ export default function SystemSettings() {
       const statsInterval = setInterval(fetchStats, 5000);
       return () => clearInterval(statsInterval);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   useEffect(() => {
@@ -77,6 +80,7 @@ export default function SystemSettings() {
     return () => {
       if (pollInterval) clearInterval(pollInterval);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [downloadingInstaller, selectedVersion]);
 
   useEffect(() => {
@@ -100,16 +104,16 @@ export default function SystemSettings() {
     }
   }, [installerStatus.downloadState.logs]);
 
-  const fetchStats = async () => {
+  async function fetchStats() {
     try {
       const data = await apiRequest('/system/stats');
       setStats(data);
     } catch (err) {
       console.error('Failed to fetch system stats', err);
     }
-  };
+  }
 
-  const fetchSettings = async () => {
+  async function fetchSettings() {
     try {
       const settings = await apiRequest('/system/settings');
       setCfKey(settings.curseforge_api_key || '');
@@ -120,9 +124,9 @@ export default function SystemSettings() {
     } catch (err) {
       console.error('Failed to fetch system settings', err);
     }
-  };
+  }
 
-  const fetchAuditLogs = async (page, action = logAction) => {
+  async function fetchAuditLogs(page, action = logAction) {
     setLoadingLogs(true);
     try {
       const res = await apiRequest(`/system/audit-logs?page=${page}&limit=15&action=${action}`);
@@ -134,9 +138,9 @@ export default function SystemSettings() {
     } finally {
       setLoadingLogs(false);
     }
-  };
+  }
 
-  const fetchInstallerStatus = async (version = selectedVersion) => {
+  async function fetchInstallerStatus(version = selectedVersion) {
     try {
       const data = await apiRequest(`/system/installer-status?version=${version}`);
       setInstallerStatus(data);
@@ -153,34 +157,34 @@ export default function SystemSettings() {
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const fetchHytaleVersions = async () => {
+  async function fetchHytaleVersions() {
     try {
       const data = await apiRequest('/system/versions');
       setHytaleVersions(data);
     } catch (err) {
       console.error('Failed to fetch Hytale versions', err);
     }
-  };
+  }
 
-  const fetchUsers = async () => {
+  async function fetchUsers() {
     try {
       const data = await apiRequest('/system/users');
       setUsers(data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
-  const fetchServersList = async () => {
+  async function fetchServersList() {
     try {
       const data = await apiRequest('/servers');
       setServers(data);
     } catch (err) {
       console.error(err);
     }
-  };
+  }
 
   const handleCreateOrUpdateUser = async (e) => {
     e.preventDefault();
@@ -241,7 +245,7 @@ export default function SystemSettings() {
     try {
       const data = await apiRequest('/system/update-check');
       setUpdateInfo(data);
-    } catch (err) {
+    } catch {
       alert('Update check failed.');
     } finally {
       setCheckingUpdates(false);
@@ -280,6 +284,44 @@ export default function SystemSettings() {
     }
   };
 
+  const handleCheckExistingFiles = async () => {
+    setCheckingFiles(true);
+    setInstallerError('');
+    try {
+      const res = await apiRequest('/system/check-files', {
+        method: 'POST'
+      });
+      alert(res.message || 'Cache files check complete.');
+      fetchHytaleVersions();
+      fetchInstallerStatus(selectedVersion);
+    } catch (err) {
+      setInstallerError(err.message || 'Failed to check existing files.');
+    } finally {
+      setCheckingFiles(false);
+    }
+  };
+
+  const handleDeleteCache = async (version) => {
+    if (!await showConfirm(`Are you sure you want to permanently delete the cached server files for Hytale version "${version}"? Servers referencing this version will not be able to start or deploy until it is re-cached.`, { title: 'Delete Server Cache', isDanger: true })) {
+      return;
+    }
+    
+    setCheckingFiles(true);
+    setInstallerError('');
+    try {
+      const res = await apiRequest(`/system/cache/${version}`, {
+        method: 'DELETE'
+      });
+      alert(res.message || 'Cache deleted successfully.');
+      fetchHytaleVersions();
+      fetchInstallerStatus(selectedVersion);
+    } catch (err) {
+      setInstallerError(err.message || 'Failed to delete server cache.');
+    } finally {
+      setCheckingFiles(false);
+    }
+  };
+
   const handleSaveSettings = async (e) => {
     e.preventDefault();
     setSaveSuccess('');
@@ -300,6 +342,16 @@ export default function SystemSettings() {
       setSaveError(err.message || 'Failed to save settings.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleCopyKey = async (keyText, label) => {
+    if (!keyText) return;
+    try {
+      await navigator.clipboard.writeText(keyText);
+      alert(`${label} copied to clipboard!`);
+    } catch {
+      alert(`Failed to copy key.`);
     }
   };
 
@@ -477,14 +529,72 @@ export default function SystemSettings() {
                     Get API Key
                   </a>
                 </div>
-                <input
-                  type="password"
-                  className="form-input"
-                  placeholder="Enter CurseForge console API key"
-                  value={cfKey}
-                  onChange={(e) => setCfKey(e.target.value)}
-                  disabled={saving}
-                />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type={showCfKey ? "text" : "password"}
+                    className="form-input"
+                    placeholder="Enter CurseForge console API key"
+                    value={cfKey}
+                    onChange={(e) => setCfKey(e.target.value)}
+                    disabled={saving}
+                    style={{ paddingRight: '76px' }}
+                  />
+                  <div style={{ position: 'absolute', right: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyKey(cfKey, 'CurseForge API Key')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-dark)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dark)'}
+                      title="Copy API Key"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowCfKey(!showCfKey)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-dark)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dark)'}
+                      title={showCfKey ? "Hide API Key" : "Show API Key"}
+                    >
+                      {showCfKey ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Required to scan and auto-install CurseForge Hytale mods.</span>
               </div>
 
@@ -520,14 +630,72 @@ export default function SystemSettings() {
                     Get API Key
                   </a>
                 </div>
-                <input
-                  type="password"
-                  className="form-input"
-                  placeholder="Enter Nexus Mods API key"
-                  value={nxKey}
-                  onChange={(e) => setNxKey(e.target.value)}
-                  disabled={saving}
-                />
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <input
+                    type={showNxKey ? "text" : "password"}
+                    className="form-input"
+                    placeholder="Enter Nexus Mods API key"
+                    value={nxKey}
+                    onChange={(e) => setNxKey(e.target.value)}
+                    disabled={saving}
+                    style={{ paddingRight: '76px' }}
+                  />
+                  <div style={{ position: 'absolute', right: '10px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyKey(nxKey, 'Nexus Mods API Key')}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-dark)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dark)'}
+                      title="Copy API Key"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowNxKey(!showNxKey)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-dark)',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'color 0.15s ease'
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = 'var(--primary)'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'var(--text-dark)'}
+                      title={showNxKey ? "Hide API Key" : "Show API Key"}
+                    >
+                      {showNxKey ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
+                          <line x1="1" y1="1" x2="23" y2="23"/>
+                        </svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                          <circle cx="12" cy="12" r="3"/>
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+                </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-dark)' }}>Used for querying remote listings discovery (manual install only).</span>
               </div>
 
@@ -618,21 +786,35 @@ export default function SystemSettings() {
                               </div>
                             </td>
                             <td style={{ padding: '10px 16px', textAlign: 'right' }}>
-                              {v.isPatchline ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedVersion(v.version);
-                                    fetchInstallerStatus(v.version);
-                                  }}
-                                  className={`btn ${selectedVersion === v.version ? 'btn-primary' : 'btn-secondary'}`}
-                                  style={{ padding: '3px 10px', fontSize: '11px' }}
-                                >
-                                  Select to Cache
-                                </button>
-                              ) : (
-                                <span style={{ color: 'var(--text-dark)', fontSize: '11px', fontStyle: 'italic' }}>Static (Read-only)</span>
-                              )}
+                              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', alignItems: 'center' }}>
+                                {v.isPatchline && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedVersion(v.version);
+                                      fetchInstallerStatus(v.version);
+                                    }}
+                                    className={`btn ${selectedVersion === v.version ? 'btn-primary' : 'btn-secondary'}`}
+                                    style={{ padding: '3px 10px', fontSize: '11px' }}
+                                  >
+                                    Select to Cache
+                                  </button>
+                                )}
+                                {!v.isPatchline && (
+                                  <span style={{ color: 'var(--text-dark)', fontSize: '11px', fontStyle: 'italic' }}>Static (Read-only)</span>
+                                )}
+                                {v.isCached && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteCache(v.version)}
+                                    className="btn btn-danger"
+                                    disabled={checkingFiles || downloadingInstaller}
+                                    style={{ padding: '3px 10px', fontSize: '11px' }}
+                                  >
+                                    Delete Cache
+                                  </button>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -680,6 +862,38 @@ export default function SystemSettings() {
                     style={{ width: '100%', marginTop: '8px' }}
                   >
                     {downloadingInstaller ? 'Downloading...' : `Download & Cache Installer (${selectedVersion})`}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCheckExistingFiles}
+                    className="btn btn-secondary"
+                    disabled={downloadingInstaller || checkingFiles}
+                    style={{
+                      width: '100%',
+                      marginTop: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px'
+                    }}
+                  >
+                    {checkingFiles ? (
+                      <>
+                        <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}>
+                          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                        </svg>
+                        Scanning Cache...
+                      </>
+                    ) : (
+                      <>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+                          <polyline points="22 4 12 14.01 9 11.01" />
+                        </svg>
+                        Check Existing Files
+                      </>
+                    )}
                   </button>
                 </form>
               </div>
@@ -755,14 +969,19 @@ export default function SystemSettings() {
 
                 {/* Active Downloading State Stats */}
                 {installerStatus.downloadState.status === 'downloading' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
-                    <div>
-                      Downloaded: {(installerStatus.downloadState.downloadedBytes / (1024 * 1024)).toFixed(2)} MB of {(installerStatus.downloadState.totalBytes / (1024 * 1024)).toFixed(2)} MB
-                    </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed rgba(255,255,255,0.05)', paddingTop: '6px', marginTop: '2px' }}>
-                      <span>Speed: <strong style={{ color: 'var(--primary)' }}>{installerStatus.downloadState.speedFormatted || '0 B/s'}</strong></span>
-                      <span>ETA: <strong style={{ color: 'var(--accent)' }}>{installerStatus.downloadState.etaFormatted || 'Estimating...'}</strong></span>
-                    </div>
+                  <div style={{ 
+                    display: 'flex', 
+                    flexWrap: 'wrap', 
+                    gap: '6px 12px', 
+                    fontSize: '11px', 
+                    color: 'var(--text-muted)',
+                    borderTop: '1px dashed rgba(255,255,255,0.05)',
+                    paddingTop: '8px',
+                    marginTop: '2px'
+                  }}>
+                    <span>Downloaded: <strong style={{ color: 'var(--text-main)' }}>{(installerStatus.downloadState.downloadedBytes / (1024 * 1024)).toFixed(2)} MB of {(installerStatus.downloadState.totalBytes / (1024 * 1024)).toFixed(2)} MB</strong></span>
+                    <span>Speed: <strong style={{ color: 'var(--primary)' }}>{installerStatus.downloadState.speedFormatted || '0 B/s'}</strong></span>
+                    <span>ETA: <strong style={{ color: 'var(--accent)' }}>{installerStatus.downloadState.etaFormatted || 'Estimating...'}</strong></span>
                   </div>
                 )}
 

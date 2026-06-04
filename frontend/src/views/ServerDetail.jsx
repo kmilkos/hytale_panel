@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { apiRequest, API_BASE_URL, WS_BASE_URL, getToken, getUser } from '../utils/api';
 import { showConfirm, showModDeleteConfirm } from '../utils/confirm';
@@ -8,11 +8,14 @@ const cleanAnsiCodes = (line) => {
   if (!line) return '';
   const str = typeof line === 'string' ? line : String(line);
   // Strip real ANSI escape codes
+  // eslint-disable-next-line no-control-regex
   let clean = str.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
   // Strip literal raw ANSI remnants like [m, [32m, [1m, [0m
   clean = clean.replace(/\[[0-9;]*m/g, '');
   return clean;
 };
+
+const cleanModFileName = (name) => name ? name.replace('.disabled', '') : '';
 
 export default function ServerDetail() {
   const { id } = useParams();
@@ -23,7 +26,7 @@ export default function ServerDetail() {
   const [installingFiles, setInstallingFiles] = useState(false);
 
   // Advanced features states
-  const [currentUser, setCurrentUser] = useState(null);
+  const [currentUser] = useState(() => getUser());
   const [metrics, setMetrics] = useState([]);
   const [serverConfig, setServerConfig] = useState(null);
   const [configFiles, setConfigFiles] = useState(['settings.json', 'server.json']);
@@ -74,8 +77,6 @@ export default function ServerDetail() {
 
     const parsedMin = parseField(min);
     const parsedHour = parseField(hour);
-    const parsedDom = parseField(dom);
-    const parsedMonth = parseField(month);
     const parsedDow = parseField(dow);
 
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -163,6 +164,7 @@ export default function ServerDetail() {
       expression = `*/${simpleSchedIntervalMin} * * * *`;
     }
 
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSchedCron(expression);
   }, [
     schedModalMode,
@@ -188,7 +190,7 @@ export default function ServerDetail() {
     try {
       const saved = localStorage.getItem('hytale_console_history');
       return saved ? JSON.parse(saved) : [];
-    } catch (_) {
+    } catch {
       return [];
     }
   });
@@ -449,15 +451,12 @@ export default function ServerDetail() {
   const [searchingRemote, setSearchingRemote] = useState(false);
   const [selectedMod, setSelectedMod] = useState(null);
   const [selectedModFiles, setSelectedModFiles] = useState([]);
-  const [conflictsList, setConflictsList] = useState([]);
   const [activeDownloads, setActiveDownloads] = useState([]);
-  const [expandedModConfigs, setExpandedModConfigs] = useState({});
+  const [syncStatus, setSyncStatus] = useState(null);
   const [modConfigsList, setModConfigsList] = useState({});
   const [fetchingConfigs, setFetchingConfigs] = useState({});
   const [modUpdates, setModUpdates] = useState({});
   const [checkingUpdates, setCheckingUpdates] = useState(false);
-  const [syncStatus, setSyncStatus] = useState(null);
-  const [fetchingSyncStatus, setFetchingSyncStatus] = useState(false);
   const [updatingMods, setUpdatingMods] = useState({});
   const [selectedInstalledMod, setSelectedInstalledMod] = useState(null);
   const [selectedInstalledModDetails, setSelectedInstalledModDetails] = useState(null);
@@ -551,7 +550,6 @@ export default function ServerDetail() {
 
   useEffect(() => {
     isMountedRef.current = true;
-    setCurrentUser(getUser());
     fetchServerDetails();
     fetchBackups();
     fetchInstalledMods();
@@ -572,6 +570,7 @@ export default function ServerDetail() {
       clearInterval(metricsInterval);
       if (wsRef.current) wsRef.current.close();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
@@ -595,6 +594,7 @@ export default function ServerDetail() {
 
   useEffect(() => {
     if (!selectedInstalledMod) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedInstalledModDetails(null);
       return;
     }
@@ -646,6 +646,7 @@ export default function ServerDetail() {
     } else {
       setSelectedInstalledModDetails(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedInstalledMod, id]);
 
   useEffect(() => {
@@ -685,9 +686,10 @@ export default function ServerDetail() {
       fetchDiagnostics();
       fetchLogs();
     }
-  }, [activeTab, currentRelPath]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, currentRelPath, ticker]);
 
-  const fetchLogs = async () => {
+  async function fetchLogs() {
     try {
       const data = await apiRequest(`/servers/${id}/logs?limit=200`, { skipErrorModal: true });
       setLogs(data.map(log => log.line));
@@ -695,9 +697,9 @@ export default function ServerDetail() {
     } catch (err) {
       console.error('Failed to fetch historical logs:', err);
     }
-  };
+  }
 
-  const fetchDiagnostics = async () => {
+  async function fetchDiagnostics() {
     try {
       setIsDiagnosticsLoading(true);
       const data = await apiRequest(`/servers/${id}/diagnostics`);
@@ -707,7 +709,7 @@ export default function ServerDetail() {
     } finally {
       setIsDiagnosticsLoading(false);
     }
-  };
+  }
 
   const handleClearLogsHistory = async () => {
     if (!await showConfirm('Are you sure you want to permanently delete all server console and error log history from the database? This cannot be undone.', { title: 'Wipe Log History', isDanger: true })) return;
@@ -743,7 +745,7 @@ export default function ServerDetail() {
   };
 
   // WS Connection for real-time console logs
-  const connectWebSocket = () => {
+  function connectWebSocket() {
     if (wsRef.current) {
       wsRef.current.close();
     }
@@ -959,7 +961,7 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchServerDetails = async () => {
+  async function fetchServerDetails() {
     try {
       setLoading(true);
       setError('');
@@ -1038,7 +1040,9 @@ export default function ServerDetail() {
       const updated = [...prev, command.trim()].slice(-50);
       try {
         localStorage.setItem('hytale_console_history', JSON.stringify(updated));
-      } catch (_) {}
+      } catch {
+        // Ignore
+      }
       return updated;
     });
     setHistoryIndex(-1);
@@ -1077,7 +1081,7 @@ export default function ServerDetail() {
   };
 
   // FILES TAB API
-  const fetchFiles = async (relPath) => {
+  async function fetchFiles(relPath) {
     try {
       const files = await apiRequest(`/files?serverId=${id}&relPath=${encodeURIComponent(relPath)}`);
       // Sort directories to the top, followed by files alphabetically
@@ -1193,7 +1197,7 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchOnlinePlayers = async () => {
+  async function fetchOnlinePlayers() {
     try {
       const data = await apiRequest(`/servers/${id}/players`);
       setOnlinePlayers(data || []);
@@ -1202,7 +1206,7 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchPlayerHistory = async (search = historySearchQuery, event = historyEventFilter) => {
+  async function fetchPlayerHistory(search = historySearchQuery, event = historyEventFilter) {
     try {
       const queryParams = new URLSearchParams({
         search: search,
@@ -1216,7 +1220,7 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchPlayerStats = async () => {
+  async function fetchPlayerStats() {
     try {
       setStatsLoading(true);
       const data = await apiRequest(`/servers/${id}/players/stats`);
@@ -1302,7 +1306,7 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchMetrics = async (rangeVal) => {
+  async function fetchMetrics(rangeVal) {
     try {
       const activeRange = rangeVal || metricsRangeRef.current;
       const limit = getMetricsLimit(activeRange);
@@ -1319,7 +1323,7 @@ export default function ServerDetail() {
     fetchMetrics(newRange);
   };
 
-  const fetchConfigFilesList = async () => {
+  async function fetchConfigFilesList() {
     try {
       const data = await apiRequest(`/servers/${id}/config-files`);
       if (Array.isArray(data) && data.length > 0) {
@@ -1352,7 +1356,7 @@ export default function ServerDetail() {
       if (typeof serverConfig === 'string') {
         try {
           bodyData = JSON.parse(serverConfig);
-        } catch (_) {
+        } catch {
           alert('Invalid JSON content. Please correct formatting before saving.');
           return;
         }
@@ -1373,7 +1377,7 @@ export default function ServerDetail() {
     fetchServerConfig(filename);
   };
 
-  const fetchHytaleVersions = async () => {
+  async function fetchHytaleVersions() {
     try {
       const data = await apiRequest('/system/versions');
       setHytaleVersions(data || []);
@@ -1382,7 +1386,7 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchSchedules = async () => {
+  async function fetchSchedules() {
     try {
       const data = await apiRequest(`/servers/${id}/schedules`);
       setSchedules(data || []);
@@ -1590,10 +1594,10 @@ export default function ServerDetail() {
     };
     const getY = (val, max) => height - padding - (val / max) * (height - 2 * padding);
 
-    let points = '';
+    let points;
     let maxVal = 100;
-    let color = 'var(--primary)';
-    let fill = 'var(--primary-glow)';
+    let color;
+    let fill;
 
     if (type === 'cpu') {
       maxVal = 100;
@@ -1639,45 +1643,22 @@ export default function ServerDetail() {
   };
 
   // MODS TAB API
-  const fetchInstalledMods = async () => {
+  async function fetchInstalledMods() {
     try {
       const data = await apiRequest(`/mods/server/${id}`);
       const list = data.mods || [];
       setInstalledMods(list);
       setSelectedInstalledMod(current => {
-        if (!current) return null;
+        if (!current) return list[0] || null;
         const updated = list.find(m => m.fileName === current.fileName);
-        return updated || null;
+        return updated || list[0] || null;
       });
     } catch (err) {
       console.error(err);
     }
   };
 
-  const handleToggleConfigs = async (fileName) => {
-    const isExpanded = !!expandedModConfigs[fileName];
-    
-    setExpandedModConfigs(prev => ({
-      ...prev,
-      [fileName]: !isExpanded
-    }));
 
-    if (isExpanded) return;
-
-    setFetchingConfigs(prev => ({ ...prev, [fileName]: true }));
-    try {
-      const data = await apiRequest(`/mods/server/${id}/configs?fileName=${encodeURIComponent(fileName)}`);
-      setModConfigsList(prev => ({
-        ...prev,
-        [fileName]: data.configs || []
-      }));
-    } catch (err) {
-      console.error('Failed to load configs for ' + fileName, err);
-      alert('Failed to load configs: ' + err.message);
-    } finally {
-      setFetchingConfigs(prev => ({ ...prev, [fileName]: false }));
-    }
-  };
 
   const handleEditConfig = async (config) => {
     try {
@@ -1690,7 +1671,7 @@ export default function ServerDetail() {
     }
   };
 
-  const handleCheckUpdates = async () => {
+  async function handleCheckUpdates() {
     setCheckingUpdates(true);
     try {
       const data = await apiRequest(`/mods/server/${id}/updates`);
@@ -1707,15 +1688,12 @@ export default function ServerDetail() {
     }
   };
 
-  const fetchSyncStatus = async () => {
-    setFetchingSyncStatus(true);
+  async function fetchSyncStatus() {
     try {
       const data = await apiRequest(`/mods/server/${id}/sync-status`);
       setSyncStatus(data);
     } catch (err) {
       console.error('Failed to fetch sync status:', err);
-    } finally {
-      setFetchingSyncStatus(false);
     }
   };
 
@@ -1748,7 +1726,7 @@ export default function ServerDetail() {
     }
   };
 
-  const handleUpdateMod = async (oldFileName, update) => {
+  const handleUpdateMod = async (oldFileName, update, showSuccessAlert = true) => {
     setUpdatingMods(prev => ({ ...prev, [oldFileName]: true }));
     try {
       await apiRequest(`/mods/server/${id}/install`, {
@@ -1757,6 +1735,7 @@ export default function ServerDetail() {
           source: 'curseforge',
           modId: update.curseforgeModId,
           fileId: update.latestFileId,
+          downloadUrl: update.latestDownloadUrl,
           fileName: update.latestFileName,
           sha1: update.latestSha1,
           deleteOldFileName: oldFileName
@@ -1769,6 +1748,9 @@ export default function ServerDetail() {
         return copy;
       });
 
+      if (showSuccessAlert) {
+        alert(`Mod update for "${update.latestFileName}" started in the background.`);
+      }
       fetchActiveDownloads();
     } catch (err) {
       console.error('Failed to update mod ' + oldFileName, err);
@@ -1784,19 +1766,33 @@ export default function ServerDetail() {
 
     if (!confirm(`Are you sure you want to update all ${list.length} outdated mods?`)) return;
 
-    for (const [oldFileName, update] of list) {
-      await handleUpdateMod(oldFileName, update);
-    }
+    const promises = list.map(([oldFileName, update]) => 
+      handleUpdateMod(oldFileName, update, false)
+    );
+    await Promise.all(promises);
+    alert(`Triggered background updates for all ${list.length} outdated mods.`);
   };
 
-  const fetchActiveDownloads = async () => {
+  async function fetchActiveDownloads() {
     try {
       const data = await apiRequest(`/mods/server/${id}/downloads`);
       setActiveDownloads(prev => {
         const hadActive = prev.some(dl => dl.status === 'downloading' || dl.status === 'verifying');
+        
+        // Check if any active download from prev was completed, failed, or removed
         const hasFinished = data && data.some(dl => dl.status === 'completed' || dl.status === 'failed');
-        if (hadActive && (hasFinished || (data && data.length < prev.length))) {
+        const justFinished = hasFinished || (prev.length > 0 && (!data || data.length < prev.length));
+
+        // Verify if there is any download that was completed or failed in this tick
+        const finishedItems = data ? data.filter(dl => dl.status === 'completed' || dl.status === 'failed') : [];
+        const hasNewFinished = finishedItems.some(dl => {
+          const prevDl = prev.find(p => p.downloadId === dl.downloadId);
+          return !prevDl || (prevDl.status !== 'completed' && prevDl.status !== 'failed');
+        });
+
+        if ((hadActive && (justFinished || hasNewFinished)) || hasNewFinished) {
           fetchInstalledMods();
+          handleCheckUpdates();
         }
         return data || [];
       });
@@ -1823,8 +1819,10 @@ export default function ServerDetail() {
 
   useEffect(() => {
     if (activeTab === 'mods' && modsSubTab === 'marketplace') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       handleSearchMods();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [modsSortBy, modsSource, activeTab, modsSubTab]);
 
   const handleViewModDetails = async (mod) => {
@@ -1922,7 +1920,6 @@ export default function ServerDetail() {
   const handleScanConflicts = async () => {
     try {
       const data = await apiRequest(`/mods/server/${id}/scan`, { method: 'POST' });
-      setConflictsList(data.conflicts || []);
       alert(`Mod Conflict Scan complete. Detected conflicts: ${data.conflictsCount}`);
       fetchInstalledMods(); // Refresh warning tags
     } catch (err) {
@@ -1964,7 +1961,7 @@ export default function ServerDetail() {
   };
 
   // BACKUPS TAB API
-  const fetchBackups = async () => {
+  async function fetchBackups() {
     try {
       const data = await apiRequest(`/servers/${id}/backups`);
       setBackups(data || []);
@@ -2161,7 +2158,7 @@ export default function ServerDetail() {
               >
                 {installingFiles ? 'Deploying Core Files...' : 'Install Hytale Server'}
               </button>
-            ) : server.status === 'stopped' ? (
+            ) : (server.status === 'stopped' || server.status === 'error') ? (
               <button onClick={() => handleServerAction('start')} className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }}>Start Server</button>
             ) : (
               <>
@@ -2946,7 +2943,7 @@ export default function ServerDetail() {
                   </div>
                 )}
                 
-                <div style={{ display: 'grid', gridTemplateColumns: selectedInstalledMod ? '1.2fr 1fr' : '1fr', gap: '24px', transition: 'all 0.3s ease' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '24px' }}>
               
               {/* Left Side: Installed List */}
               <div className="glass-panel animate-fade-in" style={{ height: 'fit-content' }}>
@@ -3160,7 +3157,7 @@ export default function ServerDetail() {
                           <div>
                             <div style={{ fontWeight: '600', display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                               <span style={{ color: isSelected ? 'var(--primary)' : 'var(--text-main)' }}>{mod.name}</span>
-                              {modUpdates[mod.fileName] && (
+                              {modUpdates[cleanModFileName(mod.fileName)] && (
                                 <span 
                                   style={{ 
                                     backgroundColor: 'rgba(16, 185, 129, 0.1)', 
@@ -3171,9 +3168,9 @@ export default function ServerDetail() {
                                     color: 'var(--success)',
                                     fontWeight: '600'
                                   }}
-                                  title={`New version: ${modUpdates[mod.fileName].latestVersion} (Compatible with Hytale v${modUpdates[mod.fileName].gameVersion})`}
+                                  title={`New version: ${modUpdates[cleanModFileName(mod.fileName)].latestVersion} (Compatible with Hytale v${modUpdates[cleanModFileName(mod.fileName)].gameVersion})`}
                                 >
-                                  ✨ Update (v{modUpdates[mod.fileName].gameVersion})
+                                  ✨ Update (v{modUpdates[cleanModFileName(mod.fileName)].gameVersion})
                                 </span>
                               )}
                               {mod.associatedFolders && mod.associatedFolders.length > 0 && (
@@ -3219,9 +3216,9 @@ export default function ServerDetail() {
                                 {mod.modId !== 'manual' ? 'curseforge' : 'manual'}
                               </span>
                               <div style={{ display: 'flex', gap: '4px' }}>
-                                {modUpdates[mod.fileName] && (
+                                {modUpdates[cleanModFileName(mod.fileName)] && (
                                   <button
-                                    onClick={() => handleUpdateMod(mod.fileName, modUpdates[mod.fileName])}
+                                    onClick={() => handleUpdateMod(mod.fileName, modUpdates[cleanModFileName(mod.fileName)])}
                                     className="btn btn-primary"
                                     style={{ padding: '3px 8px', fontSize: '11px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', color: 'var(--success)' }}
                                     disabled={isViewer || !!updatingMods[mod.fileName]}
@@ -3248,8 +3245,19 @@ export default function ServerDetail() {
               </div>
 
               {/* Right Side: Selected Mod Details Panel */}
-              {selectedInstalledMod && (
-                <div className="glass-panel animate-fade-in" style={{ height: 'fit-content', border: '1px solid var(--border)', position: 'relative', padding: '20px' }}>
+              <div className="glass-panel animate-fade-in" style={{ height: 'fit-content', border: '1px solid var(--border)', position: 'relative', padding: '20px' }}>
+                {!selectedInstalledMod ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '350px', gap: '16px', border: '2px dashed rgba(255,255,255,0.05)', borderRadius: '12px', padding: '24px', textAlign: 'center' }}>
+                    <div style={{ fontSize: '48px', opacity: 0.6 }}>📦</div>
+                    <div>
+                      <strong style={{ fontSize: '15px', color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>No Mod Selected</strong>
+                      <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: 0, maxWidth: '240px', lineHeight: '1.5' }}>
+                        Select a mod from the list to view its description, configurations, and management options.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <>
                   
                   {/* Close button */}
                   <button 
@@ -3308,6 +3316,20 @@ export default function ServerDetail() {
                           {selectedInstalledModDetails?.author && (
                             <div style={{ fontSize: '11px', color: 'var(--text-dark)', marginTop: '4px' }}>
                               By: <strong style={{ color: 'var(--text-muted)' }}>{selectedInstalledModDetails.author}</strong>
+                            </div>
+                          )}
+                          {selectedInstalledModDetails?.websiteUrl && (
+                            <div style={{ fontSize: '11px', marginTop: '6px' }}>
+                              <a 
+                                href={selectedInstalledModDetails.websiteUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                style={{ color: 'var(--primary)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '4px', fontWeight: '500' }}
+                                onMouseEnter={(e) => e.target.style.textDecoration = 'underline'}
+                                onMouseLeave={(e) => e.target.style.textDecoration = 'none'}
+                              >
+                                🌐 View Mod Source ↗
+                              </a>
                             </div>
                           )}
                         </div>
@@ -3426,13 +3448,13 @@ export default function ServerDetail() {
                           {selectedInstalledMod.isActive ? '⏸ Disable' : '▶ Enable'}
                         </button>
 
-                        {modUpdates[selectedInstalledMod.fileName] && (
+                        {modUpdates[cleanModFileName(selectedInstalledMod.fileName)] && (
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
                             <div style={{ fontSize: '11px', color: 'var(--success)', fontWeight: '600', textAlign: 'center' }}>
-                              Compatible with Hytale v{modUpdates[selectedInstalledMod.fileName].gameVersion}
+                              Compatible with Hytale v{modUpdates[cleanModFileName(selectedInstalledMod.fileName)].gameVersion}
                             </div>
                             <button
-                              onClick={() => handleUpdateMod(selectedInstalledMod.fileName, modUpdates[selectedInstalledMod.fileName])}
+                              onClick={() => handleUpdateMod(selectedInstalledMod.fileName, modUpdates[cleanModFileName(selectedInstalledMod.fileName)])}
                               className="btn btn-primary"
                               style={{ width: '100%', fontSize: '12px', padding: '8px 12px', backgroundColor: 'rgba(16, 185, 129, 0.15)', border: '1px solid var(--success)', color: 'var(--success)' }}
                               disabled={isViewer || !!updatingMods[selectedInstalledMod.fileName]}
@@ -3454,9 +3476,9 @@ export default function ServerDetail() {
 
                     </div>
                   )}
-
-                </div>
-              )}
+                  </>
+                )}
+              </div>
 
             </div>
           </div>
@@ -4955,7 +4977,7 @@ export default function ServerDetail() {
                           try {
                             const parsed = JSON.parse(e.target.value);
                             setServerConfig(parsed);
-                          } catch (_) {
+                          } catch {
                             setServerConfig(e.target.value);
                           }
                         }}

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { apiRequest, getUser, clearToken } from '../utils/api';
 import { 
@@ -6,7 +6,6 @@ import {
   Activity, 
   Users, 
   Cpu, 
-  HardDrive, 
   Search, 
   LayoutGrid, 
   List as ListIcon, 
@@ -16,8 +15,7 @@ import {
   Plus, 
   LogOut, 
   Check, 
-  X,
-  Gauge
+  X
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -25,7 +23,7 @@ export default function Dashboard() {
   const [systemStats, setSystemStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [user, setUser] = useState(null);
+  const [user] = useState(() => getUser());
   
   // Custom Controls hooks
   const [searchTerm, setSearchTerm] = useState('');
@@ -63,7 +61,6 @@ export default function Dashboard() {
     if (!curUser) {
       navigate('/login');
     } else {
-      setUser(curUser);
       fetchServers();
       fetchSystemStats();
       fetchHytaleVersions();
@@ -92,7 +89,7 @@ export default function Dashboard() {
     };
   }, [showModal]);
 
-  const fetchServers = async () => {
+  async function fetchServers() {
     try {
       setError('');
       const data = await apiRequest('/servers');
@@ -102,25 +99,25 @@ export default function Dashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const fetchSystemStats = async () => {
+  async function fetchSystemStats() {
     try {
       const stats = await apiRequest('/system/stats');
       setSystemStats(stats);
     } catch (err) {
       console.error('Failed to fetch system stats:', err);
     }
-  };
+  }
 
-  const fetchHytaleVersions = async () => {
+  async function fetchHytaleVersions() {
     try {
       const data = await apiRequest('/system/versions');
       setHytaleVersions(data || []);
     } catch (err) {
       console.error('Failed to fetch Hytale versions:', err);
     }
-  };
+  }
 
   const handleLogout = () => {
     clearToken();
@@ -549,7 +546,7 @@ export default function Dashboard() {
                         <span style={{ fontSize: '12px', color: 'var(--primary)', fontStyle: 'italic', padding: '4px 0', fontWeight: '500' }}>
                           Requires Install
                         </span>
-                      ) : srv.status === 'stopped' ? (
+                      ) : (srv.status === 'stopped' || srv.status === 'error') ? (
                         <button 
                           onClick={(e) => triggerAction(e, srv.id, 'start')} 
                           className="btn btn-accent" 
@@ -678,7 +675,7 @@ export default function Dashboard() {
                           <span style={{ fontSize: '12px', color: 'var(--primary)', fontStyle: 'italic', fontWeight: '500' }}>
                             Requires Install
                           </span>
-                        ) : srv.status === 'stopped' ? (
+                        ) : (srv.status === 'stopped' || srv.status === 'error') ? (
                           <button 
                             onClick={(e) => triggerAction(e, srv.id, 'start')} 
                             className="btn btn-accent" 

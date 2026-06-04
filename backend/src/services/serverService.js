@@ -743,29 +743,29 @@ function extractZipNative(zipPath, destDir) {
     const methods = [];
     
     if (isWin) {
-      // Method 1: tar -xf <zipName>
+      // Method 1: tar -xf <zipPath>
       methods.push({
         cmd: 'tar',
-        args: ['-xf', zipName],
+        args: ['-xf', zipPath],
         cwd: destDir
       });
       // Method 2: PowerShell Expand-Archive
       methods.push({
         cmd: 'powershell',
-        args: ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -Path "${zipName}" -DestinationPath "." -Force`],
+        args: ['-NoProfile', '-NonInteractive', '-Command', `Expand-Archive -Path "${zipPath}" -DestinationPath "." -Force`],
         cwd: destDir
       });
     } else {
-      // Method 1: tar -xf <zipName>
+      // Method 1: tar -xf <zipPath>
       methods.push({
         cmd: 'tar',
-        args: ['-xf', zipName],
+        args: ['-xf', zipPath],
         cwd: destDir
       });
-      // Method 2: unzip -o <zipName>
+      // Method 2: unzip -o <zipPath>
       methods.push({
         cmd: 'unzip',
-        args: ['-o', zipName],
+        args: ['-o', zipPath],
         cwd: destDir
       });
     }
@@ -847,6 +847,20 @@ function addInstallerLog(message) {
   if (!installerDownloadState.logs) {
     installerDownloadState.logs = [];
   }
+
+  // Detect Hytale Downloader progress bars (which contain "===" and "%" or brackets and percentage)
+  const progressRegex = /\[[=]*\s*\]\s+\d+(?:\.\d+)?%/;
+  const isProgressBar = progressRegex.test(message) || (message.includes('===') && message.includes('%'));
+  if (isProgressBar && installerDownloadState.logs.length > 0) {
+    const lastIdx = installerDownloadState.logs.length - 1;
+    const lastLine = installerDownloadState.logs[lastIdx];
+    const lastIsProgressBar = progressRegex.test(lastLine) || (lastLine.includes('===') && lastLine.includes('%'));
+    if (lastIsProgressBar) {
+      installerDownloadState.logs[lastIdx] = line;
+      return;
+    }
+  }
+
   installerDownloadState.logs.push(line);
   if (installerDownloadState.logs.length > 100) {
     installerDownloadState.logs.shift();
@@ -989,21 +1003,54 @@ async function cacheInstaller(db, downloadUrl, version = 'release') {
         const child = spawn(binaryPath, ['-check-update'], { cwd: sharedDir });
         activeInstallerProcess = child;
         
+        let stdoutBuffer = '';
+        let stderrBuffer = '';
+
         child.stdout.on('data', (data) => {
-          const chunk = data.toString();
-          logger.info(`[Downloader Update] ${chunk.trim()}`);
-          addInstallerLog(`[Downloader Update] ${chunk.trim()}`);
+          stdoutBuffer += data.toString();
+          let lastNewlineIdx = Math.max(stdoutBuffer.lastIndexOf('\n'), stdoutBuffer.lastIndexOf('\r'));
+          if (lastNewlineIdx !== -1) {
+            const completeChunks = stdoutBuffer.substring(0, lastNewlineIdx);
+            stdoutBuffer = stdoutBuffer.substring(lastNewlineIdx + 1);
+            const lines = completeChunks.split(/[\r\n]+/);
+            for (const l of lines) {
+              const trimmed = l.trim();
+              if (trimmed) {
+                logger.info(`[Downloader Update] ${trimmed}`);
+                addInstallerLog(`[Downloader Update] ${trimmed}`);
+              }
+            }
+          }
         });
 
         child.stderr.on('data', (data) => {
-          const chunk = data.toString();
-          logger.warn(`[Downloader Update Error] ${chunk.trim()}`);
-          addInstallerLog(`[Downloader Update Error] ${chunk.trim()}`);
+          stderrBuffer += data.toString();
+          let lastNewlineIdx = Math.max(stderrBuffer.lastIndexOf('\n'), stderrBuffer.lastIndexOf('\r'));
+          if (lastNewlineIdx !== -1) {
+            const completeChunks = stderrBuffer.substring(0, lastNewlineIdx);
+            stderrBuffer = stderrBuffer.substring(lastNewlineIdx + 1);
+            const lines = completeChunks.split(/[\r\n]+/);
+            for (const l of lines) {
+              const trimmed = l.trim();
+              if (trimmed) {
+                logger.warn(`[Downloader Update Error] ${trimmed}`);
+                addInstallerLog(`[Downloader Update Error] ${trimmed}`);
+              }
+            }
+          }
         });
 
         const exitCode = await new Promise((resolve) => {
           child.on('close', (code) => {
             activeInstallerProcess = null;
+            if (stdoutBuffer.trim()) {
+              logger.info(`[Downloader Update] ${stdoutBuffer.trim()}`);
+              addInstallerLog(`[Downloader Update] ${stdoutBuffer.trim()}`);
+            }
+            if (stderrBuffer.trim()) {
+              logger.warn(`[Downloader Update Error] ${stderrBuffer.trim()}`);
+              addInstallerLog(`[Downloader Update Error] ${stderrBuffer.trim()}`);
+            }
             resolve(code);
           });
           child.on('error', (err) => {
@@ -1190,7 +1237,7 @@ async function cacheInstaller(db, downloadUrl, version = 'release') {
         gameVersion = 'unknown';
         try {
           const { execSync } = require('child_process');
-          const queryOut = execSync(`"${binaryPath}" -patchline "${version}" -print-version -skip-update-check`, { encoding: 'utf8' });
+          const queryOut = execSync(`"${binaryPath}" -patchline "${version}" -print-version -skip-update-check`, { encoding: 'utf8', timeout: 5000 });
           gameVersion = queryOut.trim() || 'unknown';
         } catch (err) {
           logger.error(`Failed to query game version: ${err.message}`);
@@ -1213,26 +1260,36 @@ async function cacheInstaller(db, downloadUrl, version = 'release') {
         installerDownloadState.authUrl = null;
         installerDownloadState.authCode = null;
 
-        // Handle child output
-        child.stdout.on('data', (data) => {
-          const chunk = data.toString();
-          logger.info(`[Downloader] ${chunk.trim()}`);
-          addInstallerLog(`[Downloader] ${chunk.trim()}`);
+        let stdoutBuffer = '';
+        let stderrBuffer = '';
+
+        const processLine = (line, isStderr = false) => {
+          const trimmed = line.trim();
+          if (!trimmed) return;
+
+          if (isStderr) {
+            logger.warn(`[Downloader Error] ${trimmed}`);
+            addInstallerLog(`[Downloader Error] ${trimmed}`);
+            return;
+          }
+
+          logger.info(`[Downloader] ${trimmed}`);
+          addInstallerLog(`[Downloader] ${trimmed}`);
 
           // Parse visit / code prompt for authentication
-          if (chunk.includes('visit') || chunk.includes('http') || chunk.includes('code') || chunk.includes('device')) {
-            const urls = chunk.match(/(https?:\/\/[^\s]+)/);
+          if (trimmed.includes('visit') || trimmed.includes('http') || trimmed.includes('code') || trimmed.includes('device')) {
+            const urls = trimmed.match(/(https?:\/\/[^\s]+)/);
             if (urls && urls[0]) {
               installerDownloadState.status = 'awaiting_auth';
               installerDownloadState.authUrl = urls[0].replace(/[.,;:()'"\s]$/, '');
             }
             
             // Contextual extraction of the authentication code to avoid matching general words like "Please"
-            const codeMatch = chunk.match(/code:\s*([A-Za-z0-9]{6,10})/i) || chunk.match(/user_code=([A-Za-z0-9]{6,10})/i);
+            const codeMatch = trimmed.match(/code:\s*([A-Za-z0-9]{6,10})/i) || trimmed.match(/user_code=([A-Za-z0-9]{6,10})/i);
             if (codeMatch && codeMatch[1]) {
               installerDownloadState.authCode = codeMatch[1];
             } else {
-              const codes = chunk.match(/\b([A-Z0-9]{4}-[A-Z0-9]{4}|[A-Z0-9]{6,8})\b/i);
+              const codes = trimmed.match(/\b([A-Z0-9]{4}-[A-Z0-9]{4}|[A-Z0-9]{6,8})\b/i);
               if (codes && codes[0] && codes[0].toLowerCase() !== 'please') {
                 installerDownloadState.authCode = codes[0];
               }
@@ -1240,26 +1297,56 @@ async function cacheInstaller(db, downloadUrl, version = 'release') {
           }
 
           // Parse download progress
-          if (chunk.includes('%') || chunk.includes('Download') || chunk.includes('progress')) {
+          if (trimmed.includes('%') || trimmed.includes('Download') || trimmed.includes('progress')) {
             if (installerDownloadState.status !== 'awaiting_auth') {
               installerDownloadState.status = 'downloading_game';
             }
-            const progressMatch = chunk.match(/(\d+)%/);
+            const progressMatch = trimmed.match(/(\d+)%/);
             if (progressMatch && progressMatch[1]) {
               installerDownloadState.progress = parseInt(progressMatch[1], 10);
+            }
+          }
+        };
+
+        // Handle child output
+        child.stdout.on('data', (data) => {
+          stdoutBuffer += data.toString();
+          let lastNewlineIdx = Math.max(stdoutBuffer.lastIndexOf('\n'), stdoutBuffer.lastIndexOf('\r'));
+          if (lastNewlineIdx !== -1) {
+            const completeChunks = stdoutBuffer.substring(0, lastNewlineIdx);
+            stdoutBuffer = stdoutBuffer.substring(lastNewlineIdx + 1);
+            
+            const lines = completeChunks.split(/[\r\n]+/);
+            for (const l of lines) {
+              processLine(l, false);
             }
           }
         });
 
         child.stderr.on('data', (data) => {
-          const chunk = data.toString();
-          logger.warn(`[Downloader Error] ${chunk.trim()}`);
-          addInstallerLog(`[Downloader Error] ${chunk.trim()}`);
+          stderrBuffer += data.toString();
+          let lastNewlineIdx = Math.max(stderrBuffer.lastIndexOf('\n'), stderrBuffer.lastIndexOf('\r'));
+          if (lastNewlineIdx !== -1) {
+            const completeChunks = stderrBuffer.substring(0, lastNewlineIdx);
+            stderrBuffer = stderrBuffer.substring(lastNewlineIdx + 1);
+            
+            const lines = completeChunks.split(/[\r\n]+/);
+            for (const l of lines) {
+              processLine(l, true);
+            }
+          }
         });
 
         const exitCode = await new Promise((resolve) => {
           child.on('close', (code) => {
             activeInstallerProcess = null;
+            // Flush remaining buffers
+            if (stdoutBuffer.trim()) {
+              processLine(stdoutBuffer, false);
+            }
+            if (stderrBuffer.trim()) {
+              processLine(stderrBuffer, true);
+            }
             addInstallerLog(`Downloader utility exited with code ${code}`);
             resolve(code);
           });

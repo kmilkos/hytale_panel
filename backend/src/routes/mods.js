@@ -11,6 +11,15 @@ const { detectConflicts } = require('../services/conflictDetectionService');
 const { getActiveDownloads, downloadModFile } = require('../services/installService');
 const { buildCdnUrl } = require('../services/curseForgeService');
 
+function isVersionCompatible(gameVersions, targetVersion) {
+  if (!Array.isArray(gameVersions)) return false;
+  return (
+    gameVersions.includes(targetVersion) ||
+    gameVersions.includes('release') ||
+    gameVersions.some(gv => targetVersion === gv || targetVersion.startsWith(gv + '.'))
+  );
+}
+
 module.exports = function(db) {
   const router = express.Router();
 
@@ -280,7 +289,7 @@ module.exports = function(db) {
         try {
           const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 20 });
           // Filter files compatible with the server's Hytale version
-          const compatibleFiles = files.filter(f => Array.isArray(f.gameVersions) && f.gameVersions.includes(version));
+          const compatibleFiles = files.filter(f => isVersionCompatible(f.gameVersions, version));
           if (compatibleFiles.length === 0) continue;
 
           const latestFile = compatibleFiles[0];
@@ -360,7 +369,7 @@ module.exports = function(db) {
         try {
           const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 20 });
           // Find the latest file compatible with targetVersion or 'release'
-          const latestCompatibleFile = files.find(f => Array.isArray(f.gameVersions) && (f.gameVersions.includes(targetVersion) || f.gameVersions.includes('release')));
+          const latestCompatibleFile = files.find(f => isVersionCompatible(f.gameVersions, targetVersion));
 
           if (!latestCompatibleFile) {
             allCompatible = false;
@@ -436,7 +445,7 @@ module.exports = function(db) {
       for (const mod of dbMods) {
         const files = await curseForgeService.getModFiles(db, mod.curseforge_mod_id, { limit: 20 });
         // Find the latest file compatible with targetVersion or 'release'
-        const latestCompatibleFile = files.find(f => Array.isArray(f.gameVersions) && (f.gameVersions.includes(targetVersion) || f.gameVersions.includes('release')));
+        const latestCompatibleFile = files.find(f => isVersionCompatible(f.gameVersions, targetVersion));
 
         if (!latestCompatibleFile) {
           throw new HttpError(400, `Mod "${mod.mod_name}" does not have a version compatible with Hytale ${targetVersion}.`);
