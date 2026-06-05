@@ -1301,9 +1301,9 @@ async function cacheInstaller(db, downloadUrl, version = 'release') {
             if (installerDownloadState.status !== 'awaiting_auth') {
               installerDownloadState.status = 'downloading_game';
             }
-            const progressMatch = trimmed.match(/(\d+)%/);
+            const progressMatch = trimmed.match(/(\d+(?:\.\d+)?)%/);
             if (progressMatch && progressMatch[1]) {
-              installerDownloadState.progress = parseInt(progressMatch[1], 10);
+              installerDownloadState.progress = Math.round(parseFloat(progressMatch[1]));
             }
           }
         };
